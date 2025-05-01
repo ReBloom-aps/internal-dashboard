@@ -226,7 +226,10 @@ def main():
     
     # Add refresh button
     if st.button("🔄 Refresh Data"):
-        st.experimental_rerun()
+        if hasattr(st, 'experimental_rerun'):
+            st.experimental_rerun()
+        else:
+            st.rerun()
     
     # Fetch data
     with st.spinner("Fetching data from all sources..."):
