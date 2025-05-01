@@ -1,9 +1,8 @@
-requests==2.31.0
-python-dotenv==1.0.0
+requests
+python-dotenv
 matplotlib
-pandas
-streamlit==1.25.0
-plotly==5.15.0
+streamlit
+plotly
 pillow
-google-auth==2.22.0
-google-api-python-client==2.86.0 
+google-auth
+google-api-python-client
