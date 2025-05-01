@@ -1,8 +1,10 @@
+import base64
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+import json
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -11,9 +13,10 @@ load_dotenv()
 def get_google_analytics_service():
     """Initialize and return Google Analytics service"""
     try:
-        credentials_path = os.getenv('GOOGLE_CREDENTIALS_PATH')
-        credentials = service_account.Credentials.from_service_account_file(
-            credentials_path,
+        credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_B64')
+        credentials_json = base64.b64decode(credentials_b64).decode()
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(credentials_json),
             scopes=['https://www.googleapis.com/auth/analytics.readonly']
         )
         service = build('analyticsdata', 'v1beta', credentials=credentials)
@@ -25,9 +28,10 @@ def get_google_analytics_service():
 def get_search_console_service():
     """Initialize and return Google Search Console service"""
     try:
-        credentials_path = os.getenv('GOOGLE_CREDENTIALS_PATH')
-        credentials = service_account.Credentials.from_service_account_file(
-            credentials_path,
+        credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_B64')
+        credentials_json = base64.b64decode(credentials_b64).decode()
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(credentials_json),
             scopes=['https://www.googleapis.com/auth/webmasters.readonly']
         )
         service = build('searchconsole', 'v1', credentials=credentials)
