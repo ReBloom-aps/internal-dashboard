@@ -1,11 +1,8 @@
 import requests
-import os
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
-import seaborn as sns
 from datetime import datetime, timedelta
 import pandas as pd
-from pprint import pprint
 from collections import Counter
 
 # Set the style

@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from bubble_api import fetch_all_pages, create_growth_plot
+from bubble_api import fetch_all_pages
 from google_api import get_website_traffic, get_country_traffic, get_search_console_data, get_active_users, get_user_types, get_country_active_users
 import plotly.express as px
 import plotly.graph_objects as go
