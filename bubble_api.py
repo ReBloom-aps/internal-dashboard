@@ -1,3 +1,4 @@
+import os
 import requests
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
@@ -81,7 +82,7 @@ def print_json_structure(data, endpoint_name):
 
 def fetch_all_pages(endpoint_name):
     """Fetch all pages of data from an endpoint"""
-    base_url = f"https://rebloom.ai/api/1.1/obj/{endpoint_name}"
+    base_url = f"{os.getenv('BUBBLE_API_URL')}/{endpoint_name}"
     headers = {'Content-Type': 'application/json'}
     all_results = []
     cursor = 0
