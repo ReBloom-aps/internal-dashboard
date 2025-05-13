@@ -83,7 +83,10 @@ def print_json_structure(data, endpoint_name):
 def fetch_all_pages(endpoint_name):
     """Fetch all pages of data from an endpoint"""
     base_url = f"{os.getenv('BUBBLE_ENDPOINT')}/{endpoint_name}"
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {os.getenv("BUBBLE_API_TOKEN")}'
+    }
     all_results = []
     cursor = 0
     
