@@ -201,7 +201,6 @@ def create_interactive_plot(data, date_field, title, filter_func=None):
 def calculate_growth_metrics(data, date_field, filter_func=None):
     """Calculate growth metrics for the data"""
     results = data['response']['results']
-    print(f'results:{results}')
     if filter_func:
         results = [item for item in results if filter_func(item)]
     
@@ -218,20 +217,15 @@ def calculate_growth_metrics(data, date_field, filter_func=None):
     
     # Calculate cumulative sum
     daily_counts['Cumulative Total'] = daily_counts['Daily Count'].cumsum()
-    print(f'raw latest date:{daily_counts["Date"].max()}')
     # Calculate week-over-week growth
     latest_date = pd.to_datetime(daily_counts['Date'].max())
-    print(f'latest_date:{latest_date}')
     week_ago_date = latest_date - timedelta(days=7)
-    print(f'week_ago_date:{week_ago_date}')
     # Find the closest available date for week-ago comparison
     available_dates = sorted(daily_counts['Date'])
     week_ago_date = max([d for d in available_dates if d <= week_ago_date], default=None)
     
     current_total = daily_counts['Cumulative Total'].iloc[-1]
-    print(f'current_total:{current_total}')
     week_ago_total = daily_counts[daily_counts['Date'] == week_ago_date]['Cumulative Total'].iloc[0] if week_ago_date else 0
-    print(f'week_ago_total:{week_ago_total}')
     # Calculate weekly addition
     weekly_addition = current_total - week_ago_total if week_ago_total > 0 else current_total
     
@@ -281,7 +275,6 @@ def main():
         
         with col1:
             if 'Listing' in endpoint_data:
-                print(f'endpoint_data["Listing"]:{endpoint_data["Listing"]}')
                 total, weekly_add, growth = calculate_growth_metrics(endpoint_data['Listing'], 'Created Date')
                 growth_text = f"+{growth:.1f}%" if growth is not None else "N/A"
                 st.metric(
@@ -292,7 +285,6 @@ def main():
         
         with col2:
             if 'User' in endpoint_data:
-                print(f'endpoint_data["User"]:{endpoint_data["User"]}')
                 total, weekly_add, growth = calculate_growth_metrics(endpoint_data['User'], 'Created Date')
                 growth_text = f"+{growth:.1f}%" if growth is not None else "N/A"
                 st.metric(
