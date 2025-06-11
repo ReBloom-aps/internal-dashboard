@@ -1,3 +1,4 @@
+from demand_list import create_interactive_plot_ticket, create_ticket_size_tracker
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -237,6 +238,92 @@ def calculate_growth_metrics(data, date_field, filter_func=None):
     
     return current_total, weekly_addition, growth_percentage
 
+def add_listing_name(endpoint_data_listing, endpoint_data_deal_specification):
+    # create a new endpoint data to replace the 'OG listing' in the deal specification which is the same as 'company' in the listing endpoint with the corresponding company_name'
+    import copy
+    
+    # Debug: Print the structure of the listing data to understand the field names
+    print("=== DEBUGGING LISTING DATA ===")
+    if endpoint_data_listing and 'response' in endpoint_data_listing and 'results' in endpoint_data_listing['response']:
+        sample_listing = endpoint_data_listing['response']['results'][0] if endpoint_data_listing['response']['results'] else {}
+        print("Sample listing fields:", list(sample_listing.keys()))
+        print("First few listings:")
+        for i, item in enumerate(endpoint_data_listing['response']['results'][:3]):
+            print(f"Listing {i}: _id={item.get('_id')}, company={item.get('company')}, company_name={item.get('company_name')}")
+    
+    # Debug: Print the structure of the deal specification data
+    print("=== DEBUGGING DEAL SPECIFICATION DATA ===")
+    if endpoint_data_deal_specification and 'response' in endpoint_data_deal_specification and 'results' in endpoint_data_deal_specification['response']:
+        sample_deal = endpoint_data_deal_specification['response']['results'][0] if endpoint_data_deal_specification['response']['results'] else {}
+        print("Sample deal specification fields:", list(sample_deal.keys()))
+        print("First few deal specifications:")
+        for i, item in enumerate(endpoint_data_deal_specification['response']['results'][:3]):
+            print(f"Deal {i}: _id={item.get('_id')}, OG listing={item.get('OG listing')}")
+    
+    # Create a mapping dictionary from company ID to company name
+    company_mapping = {}
+    
+    # Try multiple possible field names for company ID and name
+    possible_id_fields = ['_id', 'company', 'company_id']
+    possible_name_fields = ['company_name', 'name', 'Listing ⁠Name']
+    
+    for item in endpoint_data_listing['response']['results']:
+        company_id = None
+        company_name = None
+        
+        # Try to find company ID
+        for id_field in possible_id_fields:
+            if item.get(id_field):
+                company_id = item.get(id_field)
+                break
+        
+        # Try to find company name
+        for name_field in possible_name_fields:
+            if item.get(name_field):
+                company_name = item.get(name_field)
+                break
+        
+        if company_id and company_name:
+            company_mapping[company_id] = company_name
+            print(f"Mapped: {company_id} -> {company_name}")
+    
+    print(f"=== COMPANY MAPPING CREATED ===")
+    print(f"Total mappings: {len(company_mapping)}")
+    print("First 5 mappings:", dict(list(company_mapping.items())[:5]))
+    
+    # Create a deep copy of the deal specification data to avoid modifying the original
+    deal_specification_with_company_name = copy.deepcopy(endpoint_data_deal_specification)
+    
+    # Now update the copied deal specification data
+    matched_count = 0
+    total_count = len(deal_specification_with_company_name['response']['results'])
+    
+    for item in deal_specification_with_company_name['response']['results']:
+        og_listing_id = item.get('OG listing')  # This should match company IDs from listing
+        if og_listing_id:
+            if og_listing_id in company_mapping:
+                # Replace the ID with the readable company name
+                item['Listing Name'] = company_mapping[og_listing_id]
+                item['Listing ID'] = og_listing_id
+                matched_count += 1
+                print(f"✓ Matched: {og_listing_id} -> {company_mapping[og_listing_id]}")
+            else:
+                # Set a default value for unmatched listings
+                item['Listing Name'] = f"Unknown ({og_listing_id})"
+                item['Listing ID'] = og_listing_id
+                print(f"✗ No match found for: {og_listing_id}")
+        else:
+            item['Listing Name'] = "No OG listing specified"
+            item['Listing ID'] = None
+            print("✗ No OG listing field found")
+    
+    print(f"=== MATCHING RESULTS ===")
+    print(f"Total deal specifications: {total_count}")
+    print(f"Successfully matched: {matched_count}")
+    print(f"Match rate: {(matched_count/total_count)*100:.1f}%")
+    
+    return deal_specification_with_company_name
+
 def main():
     st.title("📊 ReBloom Analytics Dashboard")
     
@@ -250,13 +337,17 @@ def main():
     # Fetch data
     with st.spinner("Fetching data from all sources..."):
         # Fetch Bubble API data
-        endpoints = ['Listing', 'User', 'Match']
+        # Deal specification needs be after Listing, because it uses the Listing endpoint to get the company name
+        endpoints = ['Listing', 'User', 'Match', 'Demand_listing', 'Deal specification']
         endpoint_data = {}
         
         for endpoint in endpoints:
             data = fetch_all_pages(endpoint)
             if data:
                 endpoint_data[endpoint] = data
+        
+        endpoint_data['Deal specification with company name'] = add_listing_name(endpoint_data['Listing'], endpoint_data['Deal specification'])
+
         
         # Fetch Google Analytics data
         website_traffic = get_website_traffic()
@@ -267,7 +358,7 @@ def main():
         country_active_users = get_country_active_users()
     
     # Display metrics in tabs
-    tab1, tab2, tab3 = st.tabs(["Platform Metrics", "Website Analytics", "Search Performance"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Platform Metrics", "Website Analytics", "Search Performance", "Listing Ticket Size Tracker"])
     
     with tab1:
         # Display Bubble API metrics
@@ -459,6 +550,36 @@ def main():
                         template='plotly_white')
             st.plotly_chart(fig, use_container_width=True)
     
+    with tab4:
+        if 'Deal specification with company name' in endpoint_data:
+            st.write(endpoint_data['Deal specification with company name'])
+            st.subheader("All Platform Listings Tracker")
+            st.plotly_chart(
+                create_interactive_plot_ticket(
+                    endpoint_data['Deal specification with company name'],
+                    'Deal Specification Creation Timeline',
+                    modified_date = 'Modified Date',
+                    ticket_size = 'ticket_size',
+                    listing_name = 'Listing Name'
+                ),
+                use_container_width=True
+            )
+        else:
+            st.write("No deal specification data found")
+
+        if 'Demand_listing' in endpoint_data:
+            st.subheader("Demand Listing Ticket Size Tracker")
+            
+            st.plotly_chart(
+                create_interactive_plot_ticket(
+                    endpoint_data['Demand_listing'],
+                    'Demand Listing Creation Timeline'
+                ),
+                use_container_width=True
+            )
+        else:
+            st.write("No demand listing data found")
+
     # Add timestamp
     st.markdown(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 

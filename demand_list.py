@@ -23,7 +23,7 @@ def parse_ticket_size(ticket_size_str):
     ticket_size_str = ticket_size_str.strip()
     
     if '<$1m' in ticket_size_str:
-        return 1  # Assume midpoint of 0-1m
+        return 1  
     elif '$1-5m' in ticket_size_str:
         return 5
     elif '$5-10m' in ticket_size_str:
@@ -238,7 +238,8 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
         try:
             name = item.get(listing_name, '')
             if not name:
-                raise ValueError(f"Missing {listing_name} field")
+                name = 'Not specified'
+                print(f"Warning: Missing Listing Name, using 'Not specified'")
             listing_names.append(name)
         except (ValueError, TypeError) as e:
             print(f"Warning: Could not get listing name for item: {e}")
@@ -256,31 +257,32 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     unique_listings = df['Listing ⁠Name'].unique()
     listing_count = len(unique_listings)
     
-    # Create subplots
+    # Create subplots with secondary y-axis for the top chart
     fig = make_subplots(
         rows=2, cols=1,
         subplot_titles=[main_title, f'Individual Listing Ticket Sizes ({listing_count} Listings)'],
         vertical_spacing=0.25,
-        row_heights=[0.6, 0.4]
+        row_heights=[0.6, 0.4],
+        specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
     )
     
-    # Main cumulative chart
+    # Main cumulative chart (primary y-axis)
     fig.add_trace(
         go.Scatter(
             x=df['Modified Date'],
             y=df['Cumulative Ticket Size'],
             mode='lines+markers',
-            name='Cumulative',
+            name='Cumulative Total',
             line=dict(color='#2E86AB', width=3),
             marker=dict(size=8, color='#2E86AB'),
             fill='tonexty',
             fillcolor='rgba(46, 134, 171, 0.3)',
             hovertemplate=None
         ),
-        row=1, col=1
+        row=1, col=1, secondary_y=False
     )
     
-    # Add individual listing markers with hover info
+    # Add individual listing markers with hover info (secondary y-axis)
     for i, row in df.iterrows():
         fig.add_trace(
             go.Scatter(
@@ -292,7 +294,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
                 showlegend=True,
                 hovertemplate=None
             ),
-            row=1, col=1
+            row=1, col=1, secondary_y=True
         )
     
     # Prepare data for stacked bar chart
@@ -304,22 +306,20 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     # Create stacked bar chart
     for i, listing in enumerate(unique_listings):
         group_data = listing_groups.get_group(listing)
-        y_values = []
-        hover_texts = []
         
-        for j, (_, row) in enumerate(group_data.iterrows()):
-            y_values.append(row['Ticket Size Value'])
-            hover_texts.append(
-                f"<b>{row['Listing ⁠Name']}</b><br>" +
-                f"Date: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
-            )
+        # Convert to list to allow proper indexing
+        group_rows = list(group_data.iterrows())
         
-        # Calculate bottom position for stacking
-        if len(group_data) > 1:
+        if len(group_rows) > 1:
             # If multiple entries for same listing, stack them
-            for j, (_, row) in enumerate(group_data.iterrows()):
-                bottom = sum([r['Ticket Size Value'] for _, r in group_data.iterrows()[:j]])
+            cumulative_bottom = 0
+            for j, (_, row) in enumerate(group_rows):
+                hover_text = (
+                    f"<b>{row['Listing ⁠Name']}</b><br>" +
+                    f"Date: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
+                    f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
+                )
+                
                 fig.add_trace(
                     go.Bar(
                         x=[listing],
@@ -327,21 +327,29 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
                         name=f"{listing} - {row['Modified Date'].strftime('%b %d, %Y')}",
                         marker_color=colors[j % len(colors)],
                         opacity=0.8,
-                        hovertemplate=hover_texts[j] + '<extra></extra>',
-                        base=bottom if j > 0 else 0
+                        hovertemplate=hover_text + '<extra></extra>',
+                        base=cumulative_bottom
                     ),
                     row=2, col=1
                 )
+                cumulative_bottom += row['Ticket Size Value']
         else:
             # Single entry for listing
+            row = group_rows[0][1]  # Get the row data
+            hover_text = (
+                f"<b>{row['Listing ⁠Name']}</b><br>" +
+                f"Date: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
+                f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
+            )
+            
             fig.add_trace(
                 go.Bar(
                     x=[listing],
-                    y=y_values,
+                    y=[row['Ticket Size Value']],
                     name=listing,
                     marker_color=colors[i % len(colors)],
                     opacity=0.8,
-                    hovertemplate=hover_texts[0] + '<extra></extra>'
+                    hovertemplate=hover_text + '<extra></extra>'
                 ),
                 row=2, col=1
             )
@@ -363,15 +371,18 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     fig.update_layout(
         height=800,
         showlegend=True,
-        title_text="Interactive Ticket Size Analysis",
-        title_x=0.5,
+        # title_text="Interactive Ticket Size Analysis",
+        # title_x=0.5,
         template="plotly_white",
         hovermode="x unified"
     )
     
     # Update x-axis for first subplot
     fig.update_xaxes(title_text="Modified Date", row=1, col=1)
-    fig.update_yaxes(title_text="Cumulative Ticket Size ($ Millions)", row=1, col=1)
+    
+    # Update y-axes for first subplot (dual y-axis)
+    fig.update_yaxes(title_text="Cumulative Ticket Size ($ Millions)", row=1, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="Individual Ticket Size ($ Millions)", row=1, col=1, secondary_y=True)
     
     # Update x-axis for second subplot
     fig.update_xaxes(title_text="Listings", row=2, col=1, tickangle=45)

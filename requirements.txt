@@ -6,3 +6,6 @@ plotly
 pillow
 google-auth
 google-api-python-client
+seaborn
+pandas
+dotenv
