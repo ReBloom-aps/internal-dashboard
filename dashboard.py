@@ -1,4 +1,4 @@
-from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name
+from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name, calculate_listing_ticket_metrics, calculate_demand_ticket_metrics
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -632,6 +632,46 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
     
     with tab4:
+        # Display ticket size metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            if 'Deal specification with company name' in endpoint_data:
+                total_listing_ticket, listing_count, avg_listing_ticket = calculate_listing_ticket_metrics(endpoint_data['Deal specification with company name'])
+                st.metric(
+                    "Total Listing Ticket Size",
+                    f"${total_listing_ticket:.1f}M",
+                    help="Total accumulated ticket size of all platform listings"
+                )
+        
+        with col2:
+            if 'Deal specification with company name' in endpoint_data:
+                st.metric(
+                    "Number of Listings",
+                    f"{listing_count}",
+                    help="Total number of listings with specified ticket sizes"
+                )
+        
+        with col3:
+            if 'Investor preference with highest ticket' in endpoint_data:
+                total_demand_ticket, demand_count, avg_demand_ticket = calculate_demand_ticket_metrics(endpoint_data['Investor preference with highest ticket'])
+                st.metric(
+                    "Total Demand Ticket Size",
+                    f"${total_demand_ticket:.1f}M",
+                    help="Total accumulated ticket size of all demand side preferences"
+                )
+        
+        with col4:
+            if 'Investor preference with highest ticket' in endpoint_data:
+                st.metric(
+                    "Number of Demands",
+                    f"{demand_count}",
+                    help="Total number of investor preferences with specified ticket sizes"
+                )
+        
+        # Add clarification note about ticket size calculations
+        st.info("📝 **Note**: When user selects 'Not specified' as the ticket size, it is treated as $0M in all calculations above and below.")
+        
         if 'Deal specification with company name' in endpoint_data:
             st.subheader("All Platform Listings Tracker")
             st.plotly_chart(

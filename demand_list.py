@@ -41,149 +41,52 @@ def parse_ticket_size(ticket_size_str):
     elif 'All' in ticket_size_str:
         return 100
 
-def create_ticket_size_tracker(response_data, title = 'Accumulated Ticket Size of Platform Listings Over Time', modified_date = 'Modified Date', ticket_size = 'Ticketsize', listing_name = 'Listing ⁠Name'):
+def calculate_ticket_size_metrics(response_data, modified_date='Modified Date', ticket_size='Ticketsize', listing_name=None):
+    """Calculate ticket size metrics for display on dashboard"""
     if not response_data or 'response' not in response_data or 'results' not in response_data['response']:
-        raise ValueError("Invalid response data format")
+        return 0, 0, 0  # total_ticket_size, count, average_ticket_size
         
     results = response_data['response']['results']
     if not results:
-        raise ValueError("No results found in response data")
+        return 0, 0, 0
         
-    total_count = len(results)
-    title = f"{title} (Total: {total_count})"
-    
-    # Parse modified dates with error handling
-    modified_dates = []
-    for item in results:
-        try:
-            date_str = item.get(modified_date, '')
-            if not date_str:
-                raise ValueError(f"Missing {modified_date} field")
-            # Handle both ISO format and date-only format
-            if 'T' in date_str:
-                date_str = date_str[:10]  # Take just the date part from ISO format
-            modified_dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
-        except (ValueError, TypeError) as e:
-            print(f"Warning: Could not parse date for item: {e}")
-            continue
-    
-    if not modified_dates:
-        raise ValueError("No valid dates found in the data")
-        
-    df = pd.DataFrame({'Modified Date': modified_dates})
-    
     # Parse ticket sizes with error handling
-    ticket_sizes = []
+    valid_ticket_sizes = []
     for item in results:
         try:
             size_str = item.get(ticket_size, '')
-            if not size_str:
-                raise ValueError(f"Missing {ticket_size} field")
-            ticket_sizes.append(parse_ticket_size(size_str))
-        except (ValueError, TypeError) as e:
-            print(f"Warning: Could not parse ticket size for item: {e}")
+            if size_str:
+                parsed_size = parse_ticket_size(size_str)
+                if parsed_size > 0:  # Only count non-zero ticket sizes
+                    valid_ticket_sizes.append(parsed_size)
+        except (ValueError, TypeError):
             continue
-            
-    df['Ticket Size Value'] = ticket_sizes
+    
+    if not valid_ticket_sizes:
+        return 0, 0, 0
+    
+    total_ticket_size = sum(valid_ticket_sizes)
+    count = len(valid_ticket_sizes)
+    average_ticket_size = total_ticket_size / count if count > 0 else 0
+    
+    return total_ticket_size, count, average_ticket_size
 
-    # Add listing names with error handling
-    listing_names = []
-    for item in results:
-        try:
-            name = item.get(listing_name, '')
-            if not name:
-                raise ValueError(f"Missing {listing_name} field")
-            listing_names.append(name)
-        except (ValueError, TypeError) as e:
-            print(f"Warning: Could not get listing name for item: {e}")
-            continue
-            
-    df['Listing ⁠Name'] = listing_names
-    
-    # Sort by modified date
-    df = df.sort_values('Modified Date').reset_index(drop=True)
-    
-    # Calculate cumulative ticket size
-    df['Cumulative Ticket Size'] = df['Ticket Size Value'].cumsum()
-    
-    # Create the visualization
-    plt.style.use('seaborn-v0_8')
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
-    
-    # Main cumulative chart
-    ax1.plot(df['Modified Date'], df['Cumulative Ticket Size'], 
-             marker='o', linewidth=2.5, markersize=8, color='#2E86AB')
-    ax1.fill_between(df['Modified Date'], df['Cumulative Ticket Size'], 
-                     alpha=0.3, color='#2E86AB')
-    
-    # Add individual listing markers with labels
-    for i, row in df.iterrows():
-        ax1.annotate(f"{row['Listing ⁠Name']}\n(${row['Ticket Size Value']:.1f}M)", 
-                    xy=(row['Modified Date'], row['Cumulative Ticket Size']),
-                    xytext=(10, 10), textcoords='offset points',
-                    bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7),
-                    fontsize=9, ha='left')
-    
-    ax1.set_title(title, 
-                  fontsize=16, fontweight='bold', pad=20)
-    ax1.set_xlabel('Modified Date', fontsize=12)
-    ax1.set_ylabel('Cumulative Ticket Size ($ Millions)', fontsize=12)
-    ax1.grid(True, alpha=0.3)
-    ax1.tick_params(axis='x', rotation=45)
-    
-    # Prepare data for stacked bar chart
-    # Group by listing name and create stacked data
-    listing_groups = df.groupby('Listing ⁠Name')
-    unique_listings = df['Listing ⁠Name'].unique()
-    
-    # Create stacked bar chart
-    bottom = np.zeros(len(unique_listings))
-    # Use a colormap with enough colors for all possible entries
-    colors = plt.cm.Set3(np.linspace(0, 1, max(len(df), 12)))  # Ensure at least 12 colors
-    color_idx = 0
-    
-    # Plot each group's bars
-    for listing in unique_listings:
-        group_data = listing_groups.get_group(listing)
-        for _, row in group_data.iterrows():
-            ax2.bar(listing, row['Ticket Size Value'], bottom=bottom[list(unique_listings).index(listing)],
-                   color=colors[color_idx % len(colors)], alpha=0.8, label=f"{row['Modified Date'].strftime('%b %d, %Y')}")
-            bottom[list(unique_listings).index(listing)] += row['Ticket Size Value']
-            color_idx += 1
-    
-    # Add value labels on bars
-    for i, listing in enumerate(unique_listings):
-        total_height = bottom[i]
-        ax2.text(i, total_height + 0.5, f'${total_height:.1f}M', 
-                ha='center', va='bottom', fontweight='bold')
-    
-    ax2.set_title('Individual Listing Ticket Sizes (Stacked)', fontsize=14, fontweight='bold')
-    ax2.set_xlabel('Listings', fontsize=12)
-    ax2.set_ylabel('Ticket Size ($ Millions)', fontsize=12)
-    ax2.tick_params(axis='x', rotation=45)
-    ax2.grid(True, alpha=0.3, axis='y')
-    
-    # Add legend for stacked segments
-    handles, labels = ax2.get_legend_handles_labels()
-    ax2.legend(handles, labels, title='Modified Date', bbox_to_anchor=(1.05, 1), loc='upper left')
-    
-    plt.tight_layout()
-    
-    # Print summary statistics
-    print("\n=== PLATFORM TICKET SIZE SUMMARY ===")
-    print(f"Total Accumulated Ticket Size: ${df['Cumulative Ticket Size'].iloc[-1]:.1f} Million")
-    print(f"Number of Listings: {len(df)}")
-    print(f"Average Ticket Size: ${df['Ticket Size Value'].mean():.1f} Million")
-    print(f"Largest Single Ticket: {df.loc[df['Ticket Size Value'].idxmax(), 'Listing ⁠Name']} (${df['Ticket Size Value'].max():.1f}M)")
-    print(f"Date Range: {df['Modified Date'].min().strftime('%B %d, %Y')} to {df['Modified Date'].max().strftime('%B %d, %Y')}")
-    
-    print("\n=== LISTING DETAILS ===")
-    for _, row in df.iterrows():
-        print(f"• {row['Listing ⁠Name']}: ${row['Ticket Size Value']:.1f}M - {row['Modified Date'].strftime('%b %d, %Y')}")
-    
-    plt.show()
-    
-    return df
+def calculate_listing_ticket_metrics(response_data):
+    """Calculate metrics for listing ticket sizes (Deal specification data)"""
+    return calculate_ticket_size_metrics(
+        response_data, 
+        modified_date='Modified Date', 
+        ticket_size='ticket_size', 
+        listing_name='Listing Name'
+    )
+
+def calculate_demand_ticket_metrics(response_data):
+    """Calculate metrics for demand ticket sizes (Investor preference data)"""
+    return calculate_ticket_size_metrics(
+        response_data, 
+        modified_date='Modified Date', 
+        ticket_size='highest_ticket_size'
+    )
 
 def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumulated Ticket Size of Platform Listings Over Time', modified_date='Modified Date', ticket_size='Ticketsize'):
     """Create interactive ticket size tracker plots using Plotly without listing names"""
@@ -443,7 +346,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     df['Cumulative Ticket Size'] = df['Ticket Size Value'].cumsum()
     
     # Prepare data for counting unique listings
-    unique_listings = df['Listing ⁠Name'].unique()
+    unique_listings = sorted(df['Listing ⁠Name'].unique())  # Sort alphabetically
     listing_count = len(unique_listings)
     
     # Create subplots with secondary y-axis for the top chart
@@ -650,3 +553,148 @@ def fetch_all_pages(endpoint_name):
     # To use with your CSV file, uncomment and modify:
     # df = load_from_csv_file('your_file.csv')
     # Then create similar visualizations
+
+
+# def create_ticket_size_tracker(response_data, title = 'Accumulated Ticket Size of Platform Listings Over Time', modified_date = 'Modified Date', ticket_size = 'Ticketsize', listing_name = 'Listing ⁠Name'):
+#     if not response_data or 'response' not in response_data or 'results' not in response_data['response']:
+#         raise ValueError("Invalid response data format")
+        
+#     results = response_data['response']['results']
+#     if not results:
+#         raise ValueError("No results found in response data")
+        
+#     total_count = len(results)
+#     title = f"{title} (Total: {total_count})"
+    
+#     # Parse modified dates with error handling
+#     modified_dates = []
+#     for item in results:
+#         try:
+#             date_str = item.get(modified_date, '')
+#             if not date_str:
+#                 raise ValueError(f"Missing {modified_date} field")
+#             # Handle both ISO format and date-only format
+#             if 'T' in date_str:
+#                 date_str = date_str[:10]  # Take just the date part from ISO format
+#             modified_dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
+#         except (ValueError, TypeError) as e:
+#             print(f"Warning: Could not parse date for item: {e}")
+#             continue
+    
+#     if not modified_dates:
+#         raise ValueError("No valid dates found in the data")
+        
+#     df = pd.DataFrame({'Modified Date': modified_dates})
+    
+#     # Parse ticket sizes with error handling
+#     ticket_sizes = []
+#     for item in results:
+#         try:
+#             size_str = item.get(ticket_size, '')
+#             if not size_str:
+#                 raise ValueError(f"Missing {ticket_size} field")
+#             ticket_sizes.append(parse_ticket_size(size_str))
+#         except (ValueError, TypeError) as e:
+#             print(f"Warning: Could not parse ticket size for item: {e}")
+#             continue
+            
+#     df['Ticket Size Value'] = ticket_sizes
+
+#     # Add listing names with error handling
+#     listing_names = []
+#     for item in results:
+#         try:
+#             name = item.get(listing_name, '')
+#             if not name:
+#                 raise ValueError(f"Missing {listing_name} field")
+#             listing_names.append(name)
+#         except (ValueError, TypeError) as e:
+#             print(f"Warning: Could not get listing name for item: {e}")
+#             continue
+            
+#     df['Listing ⁠Name'] = listing_names
+    
+#     # Sort by modified date
+#     df = df.sort_values('Modified Date').reset_index(drop=True)
+    
+#     # Calculate cumulative ticket size
+#     df['Cumulative Ticket Size'] = df['Ticket Size Value'].cumsum()
+    
+#     # Create the visualization
+#     plt.style.use('seaborn-v0_8')
+#     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
+    
+#     # Main cumulative chart
+#     ax1.plot(df['Modified Date'], df['Cumulative Ticket Size'], 
+#              marker='o', linewidth=2.5, markersize=8, color='#2E86AB')
+#     ax1.fill_between(df['Modified Date'], df['Cumulative Ticket Size'], 
+#                      alpha=0.3, color='#2E86AB')
+    
+#     # Add individual listing markers with labels
+#     for i, row in df.iterrows():
+#         ax1.annotate(f"{row['Listing ⁠Name']}\n(${row['Ticket Size Value']:.1f}M)", 
+#                     xy=(row['Modified Date'], row['Cumulative Ticket Size']),
+#                     xytext=(10, 10), textcoords='offset points',
+#                     bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7),
+#                     fontsize=9, ha='left')
+    
+#     ax1.set_title(title, 
+#                   fontsize=16, fontweight='bold', pad=20)
+#     ax1.set_xlabel('Modified Date', fontsize=12)
+#     ax1.set_ylabel('Cumulative Ticket Size ($ Millions)', fontsize=12)
+#     ax1.grid(True, alpha=0.3)
+#     ax1.tick_params(axis='x', rotation=45)
+    
+#     # Prepare data for stacked bar chart
+#     # Group by listing name and create stacked data
+#     listing_groups = df.groupby('Listing ⁠Name')
+#     unique_listings = df['Listing ⁠Name'].unique()
+    
+#     # Create stacked bar chart
+#     bottom = np.zeros(len(unique_listings))
+#     # Use a colormap with enough colors for all possible entries
+#     colors = plt.cm.Set3(np.linspace(0, 1, max(len(df), 12)))  # Ensure at least 12 colors
+#     color_idx = 0
+    
+#     # Plot each group's bars
+#     for listing in unique_listings:
+#         group_data = listing_groups.get_group(listing)
+#         for _, row in group_data.iterrows():
+#             ax2.bar(listing, row['Ticket Size Value'], bottom=bottom[list(unique_listings).index(listing)],
+#                    color=colors[color_idx % len(colors)], alpha=0.8, label=f"{row['Modified Date'].strftime('%b %d, %Y')}")
+#             bottom[list(unique_listings).index(listing)] += row['Ticket Size Value']
+#             color_idx += 1
+    
+#     # Add value labels on bars
+#     for i, listing in enumerate(unique_listings):
+#         total_height = bottom[i]
+#         ax2.text(i, total_height + 0.5, f'${total_height:.1f}M', 
+#                 ha='center', va='bottom', fontweight='bold')
+    
+#     ax2.set_title('Individual Listing Ticket Sizes (Stacked)', fontsize=14, fontweight='bold')
+#     ax2.set_xlabel('Listings', fontsize=12)
+#     ax2.set_ylabel('Ticket Size ($ Millions)', fontsize=12)
+#     ax2.tick_params(axis='x', rotation=45)
+#     ax2.grid(True, alpha=0.3, axis='y')
+    
+#     # Add legend for stacked segments
+#     handles, labels = ax2.get_legend_handles_labels()
+#     ax2.legend(handles, labels, title='Modified Date', bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+#     plt.tight_layout()
+    
+#     # Print summary statistics
+#     print("\n=== PLATFORM TICKET SIZE SUMMARY ===")
+#     print(f"Total Accumulated Ticket Size: ${df['Cumulative Ticket Size'].iloc[-1]:.1f} Million")
+#     print(f"Number of Listings: {len(df)}")
+#     print(f"Average Ticket Size: ${df['Ticket Size Value'].mean():.1f} Million")
+#     print(f"Largest Single Ticket: {df.loc[df['Ticket Size Value'].idxmax(), 'Listing ⁠Name']} (${df['Ticket Size Value'].max():.1f}M)")
+#     print(f"Date Range: {df['Modified Date'].min().strftime('%B %d, %Y')} to {df['Modified Date'].max().strftime('%B %d, %Y')}")
+    
+#     print("\n=== LISTING DETAILS ===")
+#     for _, row in df.iterrows():
+#         print(f"• {row['Listing ⁠Name']}: ${row['Ticket Size Value']:.1f}M - {row['Modified Date'].strftime('%b %d, %Y')}")
+    
+#     plt.show()
+    
+#     return df
