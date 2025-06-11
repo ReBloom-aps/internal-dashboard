@@ -252,11 +252,15 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     # Calculate cumulative ticket size
     df['Cumulative Ticket Size'] = df['Ticket Size Value'].cumsum()
     
+    # Prepare data for counting unique listings
+    unique_listings = df['Listing ⁠Name'].unique()
+    listing_count = len(unique_listings)
+    
     # Create subplots
     fig = make_subplots(
         rows=2, cols=1,
-        subplot_titles=[main_title, 'Individual Listing Ticket Sizes (Stacked)'],
-        vertical_spacing=0.1,
+        subplot_titles=[main_title, f'Individual Listing Ticket Sizes ({listing_count} Listings)'],
+        vertical_spacing=0.25,
         row_heights=[0.6, 0.4]
     )
     
@@ -266,14 +270,12 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
             x=df['Modified Date'],
             y=df['Cumulative Ticket Size'],
             mode='lines+markers',
-            name='Cumulative Ticket Size',
+            name='Cumulative',
             line=dict(color='#2E86AB', width=3),
             marker=dict(size=8, color='#2E86AB'),
             fill='tonexty',
             fillcolor='rgba(46, 134, 171, 0.3)',
-            hovertemplate='<b>Date:</b> %{x}<br>' +
-                         '<b>Cumulative Size:</b> $%{y:.1f}M<br>' +
-                         '<extra></extra>'
+            hovertemplate=None
         ),
         row=1, col=1
     )
@@ -283,23 +285,18 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
         fig.add_trace(
             go.Scatter(
                 x=[row['Modified Date']],
-                y=[row['Cumulative Ticket Size']],
+                y=[row['Ticket Size Value']],
                 mode='markers',
                 name=f"{row['Listing ⁠Name']}",
                 marker=dict(size=12, color='yellow', line=dict(color='black', width=1)),
-                showlegend=False,
-                hovertemplate='<b>' + row['Listing ⁠Name'] + '</b><br>' +
-                             '<b>Individual Ticket Size:</b> $' + f'{row["Ticket Size Value"]:.1f}' + 'M<br>' +
-                             '<b>Date:</b> %{x}<br>' +
-                             '<b>Cumulative Size:</b> $%{y:.1f}M<br>' +
-                             '<extra></extra>'
+                showlegend=True,
+                hovertemplate=None
             ),
             row=1, col=1
         )
     
     # Prepare data for stacked bar chart
     listing_groups = df.groupby('Listing ⁠Name')
-    unique_listings = df['Listing ⁠Name'].unique()
     
     # Create color palette
     colors = px.colors.qualitative.Set3
@@ -368,7 +365,8 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
         showlegend=True,
         title_text="Interactive Ticket Size Analysis",
         title_x=0.5,
-        template="plotly_white"
+        template="plotly_white",
+        hovermode="x unified"
     )
     
     # Update x-axis for first subplot
