@@ -552,7 +552,6 @@ def main():
     
     with tab4:
         if 'Deal specification with company name' in endpoint_data:
-            st.write(endpoint_data['Deal specification with company name'])
             st.subheader("All Platform Listings Tracker")
             st.plotly_chart(
                 create_interactive_plot_ticket(
