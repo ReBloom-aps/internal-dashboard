@@ -1,4 +1,4 @@
-from demand_list import create_interactive_plot_ticket, create_ticket_size_tracker
+from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name, create_ticket_size_tracker
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -238,6 +238,83 @@ def calculate_growth_metrics(data, date_field, filter_func=None):
     
     return current_total, weekly_addition, growth_percentage
 
+def parse_single_ticket_size(ticket_size_str):
+    """Parse a single ticket size string and return value in millions (same logic as demand_list.py)"""
+    if not ticket_size_str or ticket_size_str == '':
+        return 0
+    
+    ticket_size_str = str(ticket_size_str).strip()
+    
+    if '<$1m' in ticket_size_str:
+        return 1  
+    elif '$1-5m' in ticket_size_str:
+        return 5
+    elif '$5-10m' in ticket_size_str:
+        return 10
+    elif '$10-20m' in ticket_size_str:
+        return 20
+    elif '$20-50m' in ticket_size_str:
+        return 50
+    elif '$50-100m' in ticket_size_str:
+        return 100
+    elif '$100m+' in ticket_size_str:
+        return 100  # Assume 100m for 100m+
+    elif 'Not specified' in ticket_size_str:
+        return 0
+    elif 'All' in ticket_size_str:
+        return 100
+    else:
+        return 0
+
+def add_highest_ticket_size(endpoint_data_investor_preference):
+    """
+    Create a new dataset with highest_ticket_size field from the ticket_sizes list
+    """
+    import copy
+    
+    if not endpoint_data_investor_preference or 'response' not in endpoint_data_investor_preference:
+        return endpoint_data_investor_preference
+    
+    # Create a deep copy to avoid modifying the original
+    investor_preference_with_highest = copy.deepcopy(endpoint_data_investor_preference)
+    
+    # Process each item in the results
+    for item in investor_preference_with_highest['response']['results']:
+        ticket_sizes_list = item.get('ticket_sizes', [])
+        
+        if ticket_sizes_list and isinstance(ticket_sizes_list, list):
+            # Parse each ticket size and find the maximum
+            parsed_sizes = []
+            for ticket_size in ticket_sizes_list:
+                parsed_value = parse_single_ticket_size(ticket_size)
+                parsed_sizes.append(parsed_value)
+            
+            # Find the highest ticket size
+            highest_size = max(parsed_sizes) if parsed_sizes else 0
+            
+            # Find the original string that corresponds to the highest value
+            highest_ticket_string = ""
+            for ticket_size in ticket_sizes_list:
+                if parse_single_ticket_size(ticket_size) == highest_size:
+                    highest_ticket_string = ticket_size
+                    break
+            
+            # Add the new fields
+            item['highest_ticket_size'] = highest_ticket_string
+            item['highest_ticket_size_value'] = highest_size
+            
+            print(f"Processed ticket_sizes {ticket_sizes_list} -> highest: {highest_ticket_string} (${highest_size}M)")
+        else:
+            # No ticket_sizes or empty list
+            item['highest_ticket_size'] = "Not specified"
+            item['highest_ticket_size_value'] = 0
+            print(f"No ticket_sizes found, setting to 'Not specified'")
+    
+    print(f"=== HIGHEST TICKET SIZE PROCESSING COMPLETE ===")
+    print(f"Processed {len(investor_preference_with_highest['response']['results'])} investor preference records")
+    
+    return investor_preference_with_highest
+
 def add_listing_name(endpoint_data_listing, endpoint_data_deal_specification):
     # create a new endpoint data to replace the 'OG listing' in the deal specification which is the same as 'company' in the listing endpoint with the corresponding company_name'
     import copy
@@ -338,7 +415,7 @@ def main():
     with st.spinner("Fetching data from all sources..."):
         # Fetch Bubble API data
         # Deal specification needs be after Listing, because it uses the Listing endpoint to get the company name
-        endpoints = ['Listing', 'User', 'Match', 'Demand_listing', 'Deal specification']
+        endpoints = ['Listing', 'User', 'Match', 'Demand_listing', 'Deal specification', 'Investor preference']
         endpoint_data = {}
         
         for endpoint in endpoints:
@@ -347,6 +424,10 @@ def main():
                 endpoint_data[endpoint] = data
         
         endpoint_data['Deal specification with company name'] = add_listing_name(endpoint_data['Listing'], endpoint_data['Deal specification'])
+        
+        # Process investor preference data to add highest ticket size
+        if 'Investor preference' in endpoint_data:
+            endpoint_data['Investor preference with highest ticket'] = add_highest_ticket_size(endpoint_data['Investor preference'])
 
         
         # Fetch Google Analytics data
@@ -565,6 +646,21 @@ def main():
             )
         else:
             st.write("No deal specification data found")
+
+        if 'Investor preference with highest ticket' in endpoint_data:
+            st.subheader("Demand Side Ticket Size")
+
+            st.plotly_chart(
+                create_interactive_plot_ticket_no_listing_name(
+                    endpoint_data['Investor preference with highest ticket'],
+                    'Investor Preference Creation Timeline',
+                    modified_date = 'Modified Date',
+                    ticket_size = 'highest_ticket_size',
+                ),
+                use_container_width=True
+            )
+        else:
+            st.write("No investor preference data found")
 
         if 'Demand_listing' in endpoint_data:
             st.subheader("Demand Listing Ticket Size Tracker")

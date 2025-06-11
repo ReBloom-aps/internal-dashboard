@@ -185,6 +185,195 @@ def create_ticket_size_tracker(response_data, title = 'Accumulated Ticket Size o
     
     return df
 
+def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumulated Ticket Size of Platform Listings Over Time', modified_date='Modified Date', ticket_size='Ticketsize'):
+    """Create interactive ticket size tracker plots using Plotly without listing names"""
+    
+    if not response_data or 'response' not in response_data or 'results' not in response_data['response']:
+        raise ValueError("Invalid response data format")
+        
+    results = response_data['response']['results']
+    if not results:
+        raise ValueError("No results found in response data")
+        
+    total_count = len(results)
+    main_title = f"{title} (Total: {total_count})"
+    
+    # Parse modified dates with error handling
+    modified_dates = []
+    for item in results:
+        try:
+            date_str = item.get(modified_date, '')
+            if not date_str:
+                raise ValueError(f"Missing {modified_date} field")
+            # Handle both ISO format and date-only format
+            if 'T' in date_str:
+                date_str = date_str[:10]  # Take just the date part from ISO format
+            modified_dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
+        except (ValueError, TypeError) as e:
+            print(f"Warning: Could not parse date for item: {e}")
+            continue
+    
+    if not modified_dates:
+        raise ValueError("No valid dates found in the data")
+        
+    df = pd.DataFrame({'Modified Date': modified_dates})
+    
+    # Parse ticket sizes with error handling
+    ticket_sizes = []
+    for item in results:
+        try:
+            size_str = item.get(ticket_size, '')
+            if not size_str:
+                raise ValueError(f"Missing {ticket_size} field")
+            ticket_sizes.append(parse_ticket_size(size_str))
+        except (ValueError, TypeError) as e:
+            print(f"Warning: Could not parse ticket size for item: {e}")
+            continue
+            
+    df['Ticket Size Value'] = ticket_sizes
+    
+    # Sort by modified date
+    df = df.sort_values('Modified Date').reset_index(drop=True)
+    
+    # Calculate cumulative ticket size
+    df['Cumulative Ticket Size'] = df['Ticket Size Value'].cumsum()
+    
+    # Create subplots with secondary y-axis for the top chart
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=[main_title, f'Daily Ticket Sizes Over Time ({total_count} Entries)'],
+        vertical_spacing=0.25,
+        row_heights=[0.6, 0.4],
+        specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
+    )
+    
+    # Main cumulative chart (primary y-axis)
+    fig.add_trace(
+        go.Scatter(
+            x=df['Modified Date'],
+            y=df['Cumulative Ticket Size'],
+            mode='lines+markers',
+            name='Cumulative Total',
+            line=dict(color='#2E86AB', width=3),
+            marker=dict(size=8, color='#2E86AB'),
+            fill='tonexty',
+            fillcolor='rgba(46, 134, 171, 0.3)',
+            hovertemplate='<b>Cumulative Total</b><br>' +
+                         'Date: %{x}<br>' +
+                         'Cumulative Size: $%{y:.1f}M<extra></extra>'
+        ),
+        row=1, col=1, secondary_y=False
+    )
+    
+    # Add individual ticket size markers (secondary y-axis)
+    fig.add_trace(
+        go.Scatter(
+            x=df['Modified Date'],
+            y=df['Ticket Size Value'],
+            mode='markers',
+            name='Individual Tickets',
+            marker=dict(size=10, color='orange', line=dict(color='black', width=1)),
+            hovertemplate='<b>Individual Ticket</b><br>' +
+                         'Date: %{x}<br>' +
+                         'Ticket Size: $%{y:.1f}M<extra></extra>'
+        ),
+        row=1, col=1, secondary_y=True
+    )
+    
+    # Create timeline bar chart (bottom subplot) with proper stacking
+    # Group entries by date to create stacked bars
+    date_groups = df.groupby('Modified Date')
+    
+    # Create color palette
+    colors = px.colors.qualitative.Set3
+    
+    # Get all unique dates for consistent x-axis
+    all_dates = sorted(df['Modified Date'].unique())
+    
+    # Create stacked bars for each date
+    for date_idx, date in enumerate(all_dates):
+        date_entries = date_groups.get_group(date)
+        
+        if len(date_entries) == 1:
+            # Single entry for this date
+            entry = date_entries.iloc[0]
+            hover_text = (
+                f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                f"Ticket Size: ${entry['Ticket Size Value']:.1f}M"
+            )
+            
+            fig.add_trace(
+                go.Bar(
+                    x=[date],
+                    y=[entry['Ticket Size Value']],
+                    name=f"{date.strftime('%b %d')}",
+                    marker_color=colors[date_idx % len(colors)],
+                    opacity=0.8,
+                    width=86400000 * 0.8,  # Set bar width (80% of day in milliseconds)
+                    hovertemplate=hover_text + '<extra></extra>',
+                    showlegend=False
+                ),
+                row=2, col=1
+            )
+        else:
+            # Multiple entries for this date - create stacked bars
+            cumulative_base = 0
+            for entry_idx, (_, entry) in enumerate(date_entries.iterrows()):
+                hover_text = (
+                    f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                    f"Entry {entry_idx + 1}: ${entry['Ticket Size Value']:.1f}M<br>" +
+                    f"Total for date: ${date_entries['Ticket Size Value'].sum():.1f}M"
+                )
+                
+                fig.add_trace(
+                    go.Bar(
+                        x=[date],
+                        y=[entry['Ticket Size Value']],
+                        name=f"{date.strftime('%b %d')} - Entry {entry_idx + 1}",
+                        marker_color=colors[(date_idx + entry_idx) % len(colors)],
+                        opacity=0.8,
+                        width=86400000 * 0.8,  # Set bar width (80% of day in milliseconds)
+                        base=[cumulative_base],  # Stack on top of previous bars
+                        hovertemplate=hover_text + '<extra></extra>',
+                        showlegend=False
+                    ),
+                    row=2, col=1
+                )
+                cumulative_base += entry['Ticket Size Value']
+    
+    # Update layout
+    fig.update_layout(
+        height=800,
+        showlegend=True,
+        template="plotly_white",
+        hovermode="x unified"
+    )
+    
+    # Update x-axis for first subplot
+    fig.update_xaxes(title_text="Modified Date", row=1, col=1)
+    
+    # Update y-axes for first subplot (dual y-axis)
+    fig.update_yaxes(title_text="Cumulative Ticket Size ($ Millions)", row=1, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="Individual Ticket Size ($ Millions)", row=1, col=1, secondary_y=True)
+    
+    # Update x-axis for second subplot
+    fig.update_xaxes(title_text="Date", row=2, col=1, tickangle=45)
+    fig.update_yaxes(title_text="Daily Ticket Size Total ($ Millions)", row=2, col=1)
+    
+    # Print summary statistics
+    print("\n=== TICKET SIZE SUMMARY (No Listing Names) ===")
+    print(f"Total Accumulated Ticket Size: ${df['Cumulative Ticket Size'].iloc[-1]:.1f} Million")
+    print(f"Number of Entries: {len(df)}")
+    print(f"Average Ticket Size: ${df['Ticket Size Value'].mean():.1f} Million")
+    print(f"Largest Single Ticket: ${df['Ticket Size Value'].max():.1f}M")
+    print(f"Date Range: {df['Modified Date'].min().strftime('%B %d, %Y')} to {df['Modified Date'].max().strftime('%B %d, %Y')}")
+    
+    print("\n=== ENTRY DETAILS ===")
+    for _, row in df.iterrows():
+        print(f"• ${row['Ticket Size Value']:.1f}M - {row['Modified Date'].strftime('%b %d, %Y')}")
+    
+    return fig
+
 def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size of Platform Listings Over Time', modified_date='Modified Date', ticket_size='Ticketsize', listing_name='Listing ⁠Name'):
     """Create interactive ticket size tracker plots using Plotly"""
     
