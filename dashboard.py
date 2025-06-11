@@ -1,4 +1,4 @@
-from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name, create_ticket_size_tracker
+from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta

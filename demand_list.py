@@ -492,7 +492,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     # Create color palette
     colors = px.colors.qualitative.Set3
     
-    # Create stacked bar chart
+    # Create stacked bar chart with proper stacking and thick bars
     for i, listing in enumerate(unique_listings):
         group_data = listing_groups.get_group(listing)
         
@@ -500,13 +500,14 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
         group_rows = list(group_data.iterrows())
         
         if len(group_rows) > 1:
-            # If multiple entries for same listing, stack them
+            # If multiple entries for same listing, stack them properly
             cumulative_bottom = 0
             for j, (_, row) in enumerate(group_rows):
                 hover_text = (
                     f"<b>{row['Listing ⁠Name']}</b><br>" +
-                    f"Date: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                    f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
+                    f"Entry {j + 1}: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
+                    f"Ticket Size: ${row['Ticket Size Value']:.1f}M<br>" +
+                    f"Total for listing: ${group_data['Ticket Size Value'].sum():.1f}M"
                 )
                 
                 fig.add_trace(
@@ -514,10 +515,12 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
                         x=[listing],
                         y=[row['Ticket Size Value']],
                         name=f"{listing} - {row['Modified Date'].strftime('%b %d, %Y')}",
-                        marker_color=colors[j % len(colors)],
+                        marker_color=colors[(i + j) % len(colors)],
                         opacity=0.8,
+                        width=0.8,  # Set bar width (80% of category width)
+                        base=[cumulative_bottom],  # Stack on top of previous bars
                         hovertemplate=hover_text + '<extra></extra>',
-                        base=cumulative_bottom
+                        showlegend=False
                     ),
                     row=2, col=1
                 )
@@ -538,23 +541,14 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
                     name=listing,
                     marker_color=colors[i % len(colors)],
                     opacity=0.8,
-                    hovertemplate=hover_text + '<extra></extra>'
+                    width=0.8,  # Set bar width (80% of category width)
+                    hovertemplate=hover_text + '<extra></extra>',
+                    showlegend=False
                 ),
                 row=2, col=1
             )
     
-    # Add value labels on bars
-    for i, listing in enumerate(unique_listings):
-        group_data = listing_groups.get_group(listing)
-        total_height = group_data['Ticket Size Value'].sum()
-        fig.add_annotation(
-            x=listing,
-            y=total_height + 0.5,
-            text=f'${total_height:.1f}M',
-            showarrow=False,
-            font=dict(size=12, color='black'),
-            row=2, col=1
-        )
+    # Value labels removed for cleaner visualization
     
     # Update layout
     fig.update_layout(
