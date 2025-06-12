@@ -715,3 +715,319 @@ def fetch_all_pages(endpoint_name):
 #     plt.show()
     
 #     return df
+
+def create_combined_demand_plot(investor_preference_data, demand_listing_data, title='Demand Side Ticket Size', modified_date='Modified Date'):
+    """Create interactive combined plot for investor preferences and demand listings with different colors"""
+    
+    # Validate data
+    if not investor_preference_data or 'response' not in investor_preference_data or 'results' not in investor_preference_data['response']:
+        raise ValueError("Invalid investor preference data format")
+    if not demand_listing_data or 'response' not in demand_listing_data or 'results' not in demand_listing_data['response']:
+        raise ValueError("Invalid demand listing data format")
+        
+    investor_results = investor_preference_data['response']['results']
+    demand_results = demand_listing_data['response']['results']
+    
+    if not investor_results and not demand_results:
+        raise ValueError("No results found in either dataset")
+        
+    # Process investor preference data
+    investor_dates = []
+    investor_ticket_sizes = []
+    
+    for item in investor_results:
+        try:
+            date_str = item.get(modified_date, '')
+            if not date_str:
+                continue
+            # Handle both ISO format and date-only format
+            if 'T' in date_str:
+                date_str = date_str[:10]
+            investor_dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
+            
+            size_str = item.get('highest_ticket_size', '')
+            investor_ticket_sizes.append(parse_ticket_size(size_str))
+        except (ValueError, TypeError) as e:
+            print(f"Warning: Could not parse investor preference item: {e}")
+            continue
+    
+    # Process demand listing data
+    demand_dates = []
+    demand_ticket_sizes = []
+    demand_listing_names = []
+    
+    for item in demand_results:
+        try:
+            date_str = item.get(modified_date, '')
+            if not date_str:
+                continue
+            # Handle both ISO format and date-only format
+            if 'T' in date_str:
+                date_str = date_str[:10]
+            demand_dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
+            
+            size_str = item.get('Ticketsize', '')
+            demand_ticket_sizes.append(parse_ticket_size(size_str))
+            
+            listing_name = item.get('Listing ⁠Name', 'Not specified')
+            demand_listing_names.append(listing_name)
+        except (ValueError, TypeError) as e:
+            print(f"Warning: Could not parse demand listing item: {e}")
+            continue
+    
+    # Create combined DataFrame
+    combined_data = []
+    
+    # Add investor preference data
+    for date, size in zip(investor_dates, investor_ticket_sizes):
+        combined_data.append({
+            'Date': date,
+            'Ticket Size': size,
+            'Source': 'Investor Preference',
+            'Listing Name': None
+        })
+    
+    # Add demand listing data
+    for date, size, listing in zip(demand_dates, demand_ticket_sizes, demand_listing_names):
+        combined_data.append({
+            'Date': date,
+            'Ticket Size': size,
+            'Source': 'Demand Listing',
+            'Listing Name': listing
+        })
+    
+    if not combined_data:
+        raise ValueError("No valid data found in either dataset")
+    
+    df = pd.DataFrame(combined_data)
+    df = df.sort_values('Date').reset_index(drop=True)
+    
+    # Calculate cumulative ticket size
+    df['Cumulative Ticket Size'] = df['Ticket Size'].cumsum()
+    
+    total_count = len(df)
+    investor_count = len([x for x in combined_data if x['Source'] == 'Investor Preference'])
+    demand_count = len([x for x in combined_data if x['Source'] == 'Demand Listing'])
+    
+    main_title = f"{title} (Total: {total_count} | Investor Pref: {investor_count} | Demand Listings: {demand_count})"
+    
+    # Create subplots with secondary y-axis for the top chart
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=[main_title, f'Daily Demand Ticket Sizes ({total_count} Entries)'],
+        vertical_spacing=0.25,
+        row_heights=[0.6, 0.4],
+        specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
+    )
+    
+    # Main cumulative chart (primary y-axis)
+    fig.add_trace(
+        go.Scatter(
+            x=df['Date'],
+            y=df['Cumulative Ticket Size'],
+            mode='lines+markers',
+            name='Cumulative Total',
+            line=dict(color='#2E86AB', width=3),
+            marker=dict(size=8, color='#2E86AB'),
+            fill='tonexty',
+            fillcolor='rgba(46, 134, 171, 0.3)',
+            hovertemplate='<b>Cumulative Total</b><br>' +
+                         'Cumulative Size: $%{y:.1f}M<extra></extra>'
+        ),
+        row=1, col=1, secondary_y=False
+    )
+    
+    # Add individual markers with different colors for each source (secondary y-axis)
+    investor_df = df[df['Source'] == 'Investor Preference']
+    demand_df = df[df['Source'] == 'Demand Listing']
+    
+    # Investor preference markers (single orange color)
+    if not investor_df.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=investor_df['Date'],
+                y=investor_df['Ticket Size'],
+                mode='markers',
+                name='Investor Preferences',
+                marker=dict(size=10, color='orange', line=dict(color='black', width=1)),
+                hovertemplate='<b>Investor Preference</b><br>' +
+                             'Date: %{x}<br>' +
+                             'Ticket Size: $%{y:.1f}M<extra></extra>',
+                showlegend=True
+            ),
+            row=1, col=1, secondary_y=True
+        )
+    
+    # Demand listing markers (yellow) with listing names
+    if not demand_df.empty:
+        hover_text = []
+        for _, row in demand_df.iterrows():
+            hover_text.append(
+                f"<b>Demand Listing</b><br>" +
+                f"Listing: {row['Listing Name']}<br>" +
+                f"Date: {row['Date'].strftime('%Y-%m-%d')}<br>" +
+                f"Ticket Size: ${row['Ticket Size']:.1f}M"
+            )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=demand_df['Date'],
+                y=demand_df['Ticket Size'],
+                mode='markers',
+                name='Demand Listings',
+                marker=dict(size=10, color='yellow', line=dict(color='black', width=1)),
+                text=hover_text,
+                hovertemplate='%{text}<extra></extra>',
+                showlegend=True
+            ),
+            row=1, col=1, secondary_y=True
+        )
+    
+    # Create timeline bar chart (bottom subplot) with proper stacking by date
+    date_groups = df.groupby('Date')
+    colors = px.colors.qualitative.Set3
+    
+    # Get all unique dates for consistent x-axis
+    all_dates = sorted(df['Date'].unique())
+    
+    # Create stacked bars for each date with color coding by source
+    orange_colors = ['#FF8C00', '#FF7F50', '#FF6347', '#FF4500', '#FFA500', '#FFB347', '#FFCC99']
+    investor_color_idx = 0
+    
+    for date_idx, date in enumerate(all_dates):
+        date_entries = date_groups.get_group(date)
+        
+        if len(date_entries) == 1:
+            # Single entry for this date
+            entry = date_entries.iloc[0]
+            if entry['Source'] == 'Investor Preference':
+                color = orange_colors[investor_color_idx % len(orange_colors)]
+                investor_color_idx += 1
+            else:
+                color = 'yellow'
+            
+            if entry['Source'] == 'Demand Listing':
+                hover_text = (
+                    f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                    f"Source: {entry['Source']}<br>" +
+                    f"Listing: {entry['Listing Name']}<br>" +
+                    f"Ticket Size: ${entry['Ticket Size']:.1f}M"
+                )
+            else:
+                hover_text = (
+                    f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                    f"Source: {entry['Source']}<br>" +
+                    f"Ticket Size: ${entry['Ticket Size']:.1f}M"
+                )
+            
+            fig.add_trace(
+                go.Bar(
+                    x=[date],
+                    y=[entry['Ticket Size']],
+                    name=f"{date.strftime('%b %d')} - {entry['Source'][:8]}",
+                    marker_color=color,
+                    opacity=0.8,
+                    width=86400000 * 0.8,
+                    hovertemplate=hover_text + '<extra></extra>',
+                    showlegend=False
+                ),
+                row=2, col=1
+            )
+        else:
+            # Multiple entries for this date - create stacked bars
+            cumulative_base = 0
+            total_for_date = date_entries['Ticket Size'].sum()
+            date_entries_list = list(date_entries.iterrows())
+            
+            for entry_idx, (_, entry) in enumerate(date_entries_list):
+                if entry['Source'] == 'Investor Preference':
+                    color = orange_colors[investor_color_idx % len(orange_colors)]
+                    investor_color_idx += 1
+                else:
+                    color = 'yellow'
+                
+                # Only show total for the last (top) entry in the stack
+                if entry_idx == len(date_entries_list) - 1:
+                    if entry['Source'] == 'Demand Listing':
+                        hover_text = (
+                            f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                            f"<b>Total for date: ${total_for_date:.1f}M</b><br>" +
+                            f"Entry {entry_idx + 1}: {entry['Source']}<br>" +
+                            f"Listing: {entry['Listing Name']}<br>" +
+                            f"Ticket Size: ${entry['Ticket Size']:.1f}M"
+                        )
+                    else:
+                        hover_text = (
+                            f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                            f"<b>Total for date: ${total_for_date:.1f}M</b><br>" +
+                            f"Entry {entry_idx + 1}: {entry['Source']}<br>" +
+                            f"Ticket Size: ${entry['Ticket Size']:.1f}M"
+                        )
+                else:
+                    if entry['Source'] == 'Demand Listing':
+                        hover_text = (
+                            f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                            f"Entry {entry_idx + 1}: {entry['Source']}<br>" +
+                            f"Listing: {entry['Listing Name']}<br>" +
+                            f"Ticket Size: ${entry['Ticket Size']:.1f}M"
+                        )
+                    else:
+                        hover_text = (
+                            f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                            f"Entry {entry_idx + 1}: {entry['Source']}<br>" +
+                            f"Ticket Size: ${entry['Ticket Size']:.1f}M"
+                        )
+                
+                fig.add_trace(
+                    go.Bar(
+                        x=[date],
+                        y=[entry['Ticket Size']],
+                        name=f"{date.strftime('%b %d')} - {entry['Source'][:8]} {entry_idx + 1}",
+                        marker_color=color,
+                        opacity=0.8,
+                        width=86400000 * 0.8,
+                        base=[cumulative_base],
+                        hovertemplate=hover_text + '<extra></extra>',
+                        showlegend=False
+                    ),
+                    row=2, col=1
+                )
+                cumulative_base += entry['Ticket Size']
+    
+    # Update layout
+    fig.update_layout(
+        height=800,
+        showlegend=True,
+        template="plotly_white",
+        hovermode="x unified"
+    )
+    
+    # Update x-axis for first subplot
+    fig.update_xaxes(title_text="Date", row=1, col=1)
+    
+    # Update y-axes for first subplot (dual y-axis)
+    fig.update_yaxes(title_text="Cumulative Ticket Size ($ Millions)", row=1, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="Individual Ticket Size ($ Millions)", row=1, col=1, secondary_y=True)
+    
+    # Update x-axis for second subplot
+    fig.update_xaxes(title_text="Date", row=2, col=1, tickangle=45)
+    fig.update_yaxes(title_text="Daily Ticket Size Total ($ Millions)", row=2, col=1)
+    
+    # Print summary statistics
+    print("\n=== COMBINED DEMAND TICKET SIZE SUMMARY ===")
+    print(f"Total Accumulated Ticket Size: ${df['Cumulative Ticket Size'].iloc[-1]:.1f} Million")
+    print(f"Total Entries: {len(df)}")
+    print(f"  - Investor Preferences: {investor_count}")
+    print(f"  - Demand Listings: {demand_count}")
+    print(f"Average Ticket Size: ${df['Ticket Size'].mean():.1f} Million")
+    print(f"Largest Single Ticket: ${df['Ticket Size'].max():.1f}M")
+    print(f"Date Range: {df['Date'].min().strftime('%B %d, %Y')} to {df['Date'].max().strftime('%B %d, %Y')}")
+    
+    print("\n=== ENTRY DETAILS ===")
+    for _, row in df.iterrows():
+        if row['Source'] == 'Demand Listing':
+            print(f"• {row['Source']}: {row['Listing Name']} - ${row['Ticket Size']:.1f}M - {row['Date'].strftime('%b %d, %Y')}")
+        else:
+            print(f"• {row['Source']}: ${row['Ticket Size']:.1f}M - {row['Date'].strftime('%b %d, %Y')}")
+    
+    return fig

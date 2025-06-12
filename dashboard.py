@@ -1,4 +1,4 @@
-from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name, calculate_listing_ticket_metrics, calculate_demand_ticket_metrics
+from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name, calculate_listing_ticket_metrics, calculate_demand_ticket_metrics, create_combined_demand_plot
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -687,33 +687,50 @@ def main():
         else:
             st.write("No deal specification data found")
 
-        if 'Investor preference with highest ticket' in endpoint_data:
+        # if 'Investor preference with highest ticket' in endpoint_data:
+        #     st.subheader("Demand Side Ticket Size")
+
+        #     st.plotly_chart(
+        #         create_interactive_plot_ticket_no_listing_name(
+        #             endpoint_data['Investor preference with highest ticket'],
+        #             'Investor Preference Creation Timeline',
+        #             modified_date = 'Modified Date',
+        #             ticket_size = 'highest_ticket_size',
+        #         ),
+        #         use_container_width=True
+        #     )
+        # else:
+        #     st.write("No investor preference data found")
+
+        # if 'Demand_listing' in endpoint_data:
+        #     st.subheader("Dark Pool Ticket Size")
+            
+        #     st.plotly_chart(
+        #         create_interactive_plot_ticket(
+        #             endpoint_data['Demand_listing'],
+        #             'Demand Listing Creation Timeline'
+        #         ),
+        #         use_container_width=True
+        #     )
+        # else:
+        #     st.write("No demand listing data found")
+
+        # Combined demand plot
+        if 'Investor preference with highest ticket' in endpoint_data and 'Demand_listing' in endpoint_data:
             st.subheader("Demand Side Ticket Size")
-
-            st.plotly_chart(
-                create_interactive_plot_ticket_no_listing_name(
-                    endpoint_data['Investor preference with highest ticket'],
-                    'Investor Preference Creation Timeline',
-                    modified_date = 'Modified Date',
-                    ticket_size = 'highest_ticket_size',
-                ),
-                use_container_width=True
-            )
-        else:
-            st.write("No investor preference data found")
-
-        if 'Demand_listing' in endpoint_data:
-            st.subheader("Dark Pool Ticket Size")
+            # st.info("🔍 **Combined View**: Orange markers represent investor preferences, yellow markers represent demand listings with company names.")
             
             st.plotly_chart(
-                create_interactive_plot_ticket(
+                create_combined_demand_plot(
+                    endpoint_data['Investor preference with highest ticket'],
                     endpoint_data['Demand_listing'],
-                    'Demand Listing Creation Timeline'
+                    'Demand Side Ticket Size',
+                    modified_date='Modified Date'
                 ),
                 use_container_width=True
             )
         else:
-            st.write("No demand listing data found")
+            st.write("Combined demand plot requires both investor preference and demand listing data")
 
     # Add timestamp
     st.markdown(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
