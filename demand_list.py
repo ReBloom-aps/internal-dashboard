@@ -438,7 +438,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     # Create subplots with secondary y-axis for the top chart
     fig = make_subplots(
         rows=2, cols=1,
-        subplot_titles=[main_title, f'Listings Ticket Sizes ({listing_count} companies)'],
+        subplot_titles=[main_title, f'Supply Ticket Sizes ({listing_count} companies)'],
         vertical_spacing=0.25,
         row_heights=[0.6, 0.4],
         specs=[[{"secondary_y": True}], [{"secondary_y": False}]]

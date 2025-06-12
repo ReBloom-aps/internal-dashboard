@@ -677,14 +677,13 @@ def main():
                 )
         
         # Add clarification note about ticket size calculations
-        st.info("📝 **Note**: When user selects 'Not specified' as the ticket size, it is treated as $0M in all calculations above and below.")
         
         if 'Deal specification with company name' in endpoint_data:
-            st.subheader("Sell Side Listings Ticket Size")
+            st.subheader("Supply Size")
             st.plotly_chart(
                 create_interactive_plot_ticket(
                     endpoint_data['Deal specification with company name'],
-                    'Listing Creation Timeline',
+                    'Supply Creation Timeline',
                     modified_date = 'Modified Date',
                     ticket_size = 'ticket_size',
                     listing_name = 'Listing Name'
@@ -724,20 +723,21 @@ def main():
 
         # Combined demand plot
         if 'Investor preference with highest ticket' in endpoint_data and 'Demand_listing' in endpoint_data:
-            st.subheader("Demand Side Ticket Size")
+            st.subheader("Demand Size")
             # st.info("🔍 **Combined View**: Orange markers represent investor preferences, yellow markers represent demand listings with company names.")
             
             st.plotly_chart(
                 create_combined_demand_plot(
                     endpoint_data['Investor preference with highest ticket'],
                     endpoint_data['Demand_listing'],
-                    'Demand Side Ticket Size',
+                    'Demand Creation Timeline',
                     modified_date='Modified Date'
                 ),
                 use_container_width=True
             )
         else:
             st.write("Combined demand plot requires both investor preference and demand listing data")
+        st.info("📝 **Note**: When user selects 'Not specified' as the ticket size, it is treated as $0M in all calculations above.")
 
     # Add timestamp
     st.markdown(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
