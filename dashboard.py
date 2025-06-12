@@ -637,11 +637,13 @@ def main():
         
         with col1:
             if 'Deal specification with company name' in endpoint_data:
-                total_listing_ticket, listing_count, avg_listing_ticket = calculate_listing_ticket_metrics(endpoint_data['Deal specification with company name'])
+                total_min, total_max, listing_count, avg_min, avg_max = calculate_listing_ticket_metrics(endpoint_data['Deal specification with company name'])
+                mean_total = (total_min + total_max) / 2
                 st.metric(
                     "Total Listing Ticket Size",
-                    f"${total_listing_ticket:.1f}M",
-                    help="Total accumulated ticket size of all platform listings"
+                    f"${total_min:.1f}M - ${total_max:.1f}M",
+                    delta=f"Mean: ${mean_total:.1f}M",
+                    help="Total accumulated ticket size range of all platform listings (minimum to maximum with mean)"
                 )
         
         with col2:
@@ -677,7 +679,7 @@ def main():
             st.plotly_chart(
                 create_interactive_plot_ticket(
                     endpoint_data['Deal specification with company name'],
-                    'Deal Specification Creation Timeline',
+                    'Listing Creation Timeline',
                     modified_date = 'Modified Date',
                     ticket_size = 'ticket_size',
                     listing_name = 'Listing Name'

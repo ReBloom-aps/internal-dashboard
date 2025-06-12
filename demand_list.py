@@ -16,7 +16,7 @@ from plotly.subplots import make_subplots
 # Anthropic,$20-50m,Jun 2 2025 5:57 pm"""
 
 def parse_ticket_size(ticket_size_str):
-    """Parse ticket size string and return midpoint value in millions"""
+    """Parse ticket size string and return max value in millions"""
     if pd.isna(ticket_size_str) or ticket_size_str == '':
         return 0
     
@@ -41,35 +41,68 @@ def parse_ticket_size(ticket_size_str):
     elif 'All' in ticket_size_str:
         return 100
 
+def parse_ticket_size_min(ticket_size_str):
+    """Parse ticket size string and return minimum value in millions"""
+    if pd.isna(ticket_size_str) or ticket_size_str == '':
+        return 0
+    
+    ticket_size_str = ticket_size_str.strip()
+    
+    if '<$1m' in ticket_size_str:
+        return 0.5  # Minimum for "<$1m" is 0
+    elif '$1-5m' in ticket_size_str:
+        return 1  # Minimum for "$1-5m" is 1
+    elif '$5-10m' in ticket_size_str:
+        return 5  # Minimum for "$5-10m" is 5
+    elif '$10-20m' in ticket_size_str:
+        return 10  # Minimum for "$10-20m" is 10
+    elif '$20-50m' in ticket_size_str:
+        return 20  # Minimum for "$20-50m" is 20
+    elif '$50-100m' in ticket_size_str:
+        return 50  # Minimum for "$50-100m" is 50
+    elif '$100m+' in ticket_size_str:
+        return 100  # Minimum for "$100m+" is 100
+    elif 'Not specified' in ticket_size_str:
+        return 0
+    elif 'All' in ticket_size_str:
+        return 0.5  # Minimum for "All" could be 0
+    else:
+        return 0
+
 def calculate_ticket_size_metrics(response_data, modified_date='Modified Date', ticket_size='Ticketsize', listing_name=None):
     """Calculate ticket size metrics for display on dashboard"""
     if not response_data or 'response' not in response_data or 'results' not in response_data['response']:
-        return 0, 0, 0  # total_ticket_size, count, average_ticket_size
+        return 0, 0, 0, 0, 0  # total_min, total_max, count, average_min, average_max
         
     results = response_data['response']['results']
     if not results:
-        return 0, 0, 0
+        return 0, 0, 0, 0, 0
         
-    # Parse ticket sizes with error handling
-    valid_ticket_sizes = []
+    # Parse ticket sizes with error handling (both min and max)
+    valid_ticket_sizes_max = []
+    valid_ticket_sizes_min = []
     for item in results:
         try:
             size_str = item.get(ticket_size, '')
             if size_str:
-                parsed_size = parse_ticket_size(size_str)
-                if parsed_size > 0:  # Only count non-zero ticket sizes
-                    valid_ticket_sizes.append(parsed_size)
+                parsed_max = parse_ticket_size(size_str)
+                parsed_min = parse_ticket_size_min(size_str)
+                if parsed_max > 0:  # Only count non-zero ticket sizes
+                    valid_ticket_sizes_max.append(parsed_max)
+                    valid_ticket_sizes_min.append(parsed_min)
         except (ValueError, TypeError):
             continue
     
-    if not valid_ticket_sizes:
-        return 0, 0, 0
+    if not valid_ticket_sizes_max:
+        return 0, 0, 0, 0, 0
     
-    total_ticket_size = sum(valid_ticket_sizes)
-    count = len(valid_ticket_sizes)
-    average_ticket_size = total_ticket_size / count if count > 0 else 0
+    total_min = sum(valid_ticket_sizes_min)
+    total_max = sum(valid_ticket_sizes_max)
+    count = len(valid_ticket_sizes_max)
+    average_min = total_min / count if count > 0 else 0
+    average_max = total_max / count if count > 0 else 0
     
-    return total_ticket_size, count, average_ticket_size
+    return total_min, total_max, count, average_min, average_max
 
 def calculate_listing_ticket_metrics(response_data):
     """Calculate metrics for listing ticket sizes (Deal specification data)"""
@@ -82,11 +115,14 @@ def calculate_listing_ticket_metrics(response_data):
 
 def calculate_demand_ticket_metrics(response_data):
     """Calculate metrics for demand ticket sizes (Investor preference data)"""
-    return calculate_ticket_size_metrics(
+    # For demand side, we only have max values (highest_ticket_size), so min = max
+    total_min, total_max, count, avg_min, avg_max = calculate_ticket_size_metrics(
         response_data, 
         modified_date='Modified Date', 
         ticket_size='highest_ticket_size'
     )
+    # Return the max values as both min and max since we only have single values
+    return total_max, count, avg_max
 
 def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumulated Ticket Size of Platform Listings Over Time', modified_date='Modified Date', ticket_size='Ticketsize'):
     """Create interactive ticket size tracker plots using Plotly without listing names"""
@@ -318,19 +354,22 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
         
     df = pd.DataFrame({'Modified Date': modified_dates})
     
-    # Parse ticket sizes with error handling
-    ticket_sizes = []
+    # Parse ticket sizes with error handling (both max and min)
+    ticket_sizes_max = []
+    ticket_sizes_min = []
     for item in results:
         try:
             size_str = item.get(ticket_size, '')
             if not size_str:
                 raise ValueError(f"Missing {ticket_size} field")
-            ticket_sizes.append(parse_ticket_size(size_str))
+            ticket_sizes_max.append(parse_ticket_size(size_str))
+            ticket_sizes_min.append(parse_ticket_size_min(size_str))
         except (ValueError, TypeError) as e:
             print(f"Warning: Could not parse ticket size for item: {e}")
             continue
             
-    df['Ticket Size Value'] = ticket_sizes
+    df['Ticket Size Value'] = ticket_sizes_max
+    df['Ticket Size Min'] = ticket_sizes_min
 
     # Add listing names with error handling
     listing_names = []
@@ -350,8 +389,9 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     # Sort by modified date
     df = df.sort_values('Modified Date').reset_index(drop=True)
     
-    # Calculate cumulative ticket size
+    # Calculate cumulative ticket size (max and min)
     df['Cumulative Ticket Size'] = df['Ticket Size Value'].cumsum()
+    df['Cumulative Ticket Size Min'] = df['Ticket Size Min'].cumsum()
     
     # Prepare data for counting unique listings
     unique_listings = sorted(df['Listing ⁠Name'].unique())  # Sort alphabetically
@@ -366,18 +406,39 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
         specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
     )
     
-    # Main cumulative chart (primary y-axis)
+    # Main cumulative chart (primary y-axis) with shaded range
+    # Add the minimum cumulative line (light blue) for fill reference
+    fig.add_trace(
+        go.Scatter(
+            x=df['Modified Date'],
+            y=df['Cumulative Ticket Size Min'],
+            mode='lines',
+            name='Cumulative Min',
+            line=dict(color='#2ED9FF', width=2),  # Light blue line
+            showlegend=True,
+            hovertemplate='<b>Cumulative Minimum</b><br>' +
+                         'Date: %{x}<br>' +
+                         'Min: $%{y:.1f}M<extra></extra>'
+        ),
+        row=1, col=1, secondary_y=False
+    )
+    
+    # Add the maximum cumulative line with fill to minimum
     fig.add_trace(
         go.Scatter(
             x=df['Modified Date'],
             y=df['Cumulative Ticket Size'],
             mode='lines+markers',
-            name='Cumulative Total',
+            name='Cumulative Max',
             line=dict(color='#2E86AB', width=3),
             marker=dict(size=8, color='#2E86AB'),
-            fill='tonexty',
+            fill='tonexty',  # Fill to previous trace (the min line)
             fillcolor='rgba(46, 134, 171, 0.3)',
-            hovertemplate=None
+            hovertemplate='<b>Cumulative Range</b><br>' +
+                         'Date: %{x}<br>' +
+                         'Max: $%{y:.1f}M<br>' +
+                         'Min: $%{text:.1f}M<extra></extra>',
+            text=df['Cumulative Ticket Size Min']
         ),
         row=1, col=1, secondary_y=False
     )
@@ -391,8 +452,11 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
                 mode='markers',
                 name=f"{row['Listing ⁠Name']}",
                 marker=dict(size=12, color='yellow', line=dict(color='black', width=1)),
-                showlegend=True,
-                hovertemplate=None
+                showlegend=False,
+                hovertemplate='<b>%{fullData.name}</b><br>' +
+                             'Date: %{x}<br>' +
+                             'Ticket Size Range: $%{text:.1f}M - $%{y:.1f}M<extra></extra>',
+                text=[row['Ticket Size Min']]
             ),
             row=1, col=1, secondary_y=True
         )
@@ -421,13 +485,13 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
                         f"<b>{row['Listing ⁠Name']}</b><br>" +
                         f"<b>Total for listing: ${total_for_listing:.1f}M</b><br>" +
                         f"Entry {j + 1}: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                        f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
+                        f"Ticket Size Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
                     )
                 else:
                     hover_text = (
                         f"<b>{row['Listing ⁠Name']}</b><br>" +
                         f"Entry {j + 1}: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                        f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
+                        f"Ticket Size Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
                     )
                 
                 fig.add_trace(
@@ -451,7 +515,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
             hover_text = (
                 f"<b>{row['Listing ⁠Name']}</b><br>" +
                 f"Date: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
+                f"Ticket Size Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
             )
             
             fig.add_trace(
