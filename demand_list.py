@@ -124,6 +124,44 @@ def calculate_demand_ticket_metrics(response_data):
     # Return the max values as both min and max since we only have single values
     return total_max, count, avg_max
 
+def calculate_combined_demand_ticket_metrics(investor_preference_data, demand_listing_data):
+    """Calculate combined metrics for demand ticket sizes from both investor preferences and demand listings"""
+    total_min_combined = 0
+    total_max_combined = 0
+    count_combined = 0
+    
+    # Process investor preference data
+    if investor_preference_data and 'response' in investor_preference_data and 'results' in investor_preference_data['response']:
+        for item in investor_preference_data['response']['results']:
+            try:
+                size_str = item.get('highest_ticket_size', '')
+                if size_str:
+                    parsed_max = parse_ticket_size(size_str)
+                    parsed_min = parse_ticket_size_min(size_str)
+                    if parsed_max > 0:
+                        total_max_combined += parsed_max
+                        total_min_combined += parsed_min
+                        count_combined += 1
+            except (ValueError, TypeError):
+                continue
+    
+    # Process demand listing data
+    if demand_listing_data and 'response' in demand_listing_data and 'results' in demand_listing_data['response']:
+        for item in demand_listing_data['response']['results']:
+            try:
+                size_str = item.get('Ticketsize', '')
+                if size_str:
+                    parsed_max = parse_ticket_size(size_str)
+                    parsed_min = parse_ticket_size_min(size_str)
+                    if parsed_max > 0:
+                        total_max_combined += parsed_max
+                        total_min_combined += parsed_min
+                        count_combined += 1
+            except (ValueError, TypeError):
+                continue
+    
+    return total_min_combined, total_max_combined, count_combined
+
 def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumulated Ticket Size of Platform Listings Over Time', modified_date='Modified Date', ticket_size='Ticketsize'):
     """Create interactive ticket size tracker plots using Plotly without listing names"""
     
@@ -797,7 +835,8 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
         
     # Process investor preference data
     investor_dates = []
-    investor_ticket_sizes = []
+    investor_ticket_sizes_max = []
+    investor_ticket_sizes_min = []
     
     for item in investor_results:
         try:
@@ -810,14 +849,16 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
             investor_dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
             
             size_str = item.get('highest_ticket_size', '')
-            investor_ticket_sizes.append(parse_ticket_size(size_str))
+            investor_ticket_sizes_max.append(parse_ticket_size(size_str))
+            investor_ticket_sizes_min.append(parse_ticket_size_min(size_str))
         except (ValueError, TypeError) as e:
             print(f"Warning: Could not parse investor preference item: {e}")
             continue
     
     # Process demand listing data
     demand_dates = []
-    demand_ticket_sizes = []
+    demand_ticket_sizes_max = []
+    demand_ticket_sizes_min = []
     demand_listing_names = []
     
     for item in demand_results:
@@ -831,7 +872,8 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
             demand_dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
             
             size_str = item.get('Ticketsize', '')
-            demand_ticket_sizes.append(parse_ticket_size(size_str))
+            demand_ticket_sizes_max.append(parse_ticket_size(size_str))
+            demand_ticket_sizes_min.append(parse_ticket_size_min(size_str))
             
             listing_name = item.get('Listing ⁠Name', 'Not specified')
             demand_listing_names.append(listing_name)
@@ -843,19 +885,21 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
     combined_data = []
     
     # Add investor preference data
-    for date, size in zip(investor_dates, investor_ticket_sizes):
+    for date, size_max, size_min in zip(investor_dates, investor_ticket_sizes_max, investor_ticket_sizes_min):
         combined_data.append({
             'Date': date,
-            'Ticket Size': size,
+            'Ticket Size': size_max,
+            'Ticket Size Min': size_min,
             'Source': 'Investor Preference',
             'Listing Name': None
         })
     
     # Add demand listing data
-    for date, size, listing in zip(demand_dates, demand_ticket_sizes, demand_listing_names):
+    for date, size_max, size_min, listing in zip(demand_dates, demand_ticket_sizes_max, demand_ticket_sizes_min, demand_listing_names):
         combined_data.append({
             'Date': date,
-            'Ticket Size': size,
+            'Ticket Size': size_max,
+            'Ticket Size Min': size_min,
             'Source': 'Demand Listing',
             'Listing Name': listing
         })
@@ -866,8 +910,9 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
     df = pd.DataFrame(combined_data)
     df = df.sort_values('Date').reset_index(drop=True)
     
-    # Calculate cumulative ticket size
+    # Calculate cumulative ticket size (max and min)
     df['Cumulative Ticket Size'] = df['Ticket Size'].cumsum()
+    df['Cumulative Ticket Size Min'] = df['Ticket Size Min'].cumsum()
     
     total_count = len(df)
     investor_count = len([x for x in combined_data if x['Source'] == 'Investor Preference'])
@@ -884,19 +929,39 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
         specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
     )
     
-    # Main cumulative chart (primary y-axis)
+    # Main cumulative chart (primary y-axis) with shaded range
+    # Add the minimum cumulative line (light blue) for fill reference
+    fig.add_trace(
+        go.Scatter(
+            x=df['Date'],
+            y=df['Cumulative Ticket Size Min'],
+            mode='lines',
+            name='Cumulative Min',
+            line=dict(color='#2ED9FF', width=2),  # Light blue line
+            showlegend=True,
+            hovertemplate='<b>Cumulative Minimum</b><br>' +
+                         'Date: %{x}<br>' +
+                         'Min: $%{y:.1f}M<extra></extra>'
+        ),
+        row=1, col=1, secondary_y=False
+    )
+    
+    # Add the maximum cumulative line with fill to minimum
     fig.add_trace(
         go.Scatter(
             x=df['Date'],
             y=df['Cumulative Ticket Size'],
             mode='lines+markers',
-            name='Cumulative Total',
+            name='Cumulative Max',
             line=dict(color='#2E86AB', width=3),
             marker=dict(size=8, color='#2E86AB'),
-            fill='tonexty',
+            fill='tonexty',  # Fill to previous trace (the min line)
             fillcolor='rgba(46, 134, 171, 0.3)',
-            hovertemplate='<b>Cumulative Total</b><br>' +
-                         'Cumulative Size: $%{y:.1f}M<extra></extra>'
+            hovertemplate='<b>Cumulative Range</b><br>' +
+                         'Date: %{x}<br>' +
+                         'Max: $%{y:.1f}M<br>' +
+                         'Min: $%{text:.1f}M<extra></extra>',
+            text=df['Cumulative Ticket Size Min']
         ),
         row=1, col=1, secondary_y=False
     )

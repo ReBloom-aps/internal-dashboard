@@ -1,4 +1,4 @@
-from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name, calculate_listing_ticket_metrics, calculate_demand_ticket_metrics, create_combined_demand_plot
+from demand_list import create_interactive_plot_ticket, create_interactive_plot_ticket_no_listing_name, calculate_listing_ticket_metrics, calculate_demand_ticket_metrics, create_combined_demand_plot, calculate_combined_demand_ticket_metrics
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -655,20 +655,25 @@ def main():
                 )
         
         with col3:
-            if 'Investor preference with highest ticket' in endpoint_data:
-                total_demand_ticket, demand_count, avg_demand_ticket = calculate_demand_ticket_metrics(endpoint_data['Investor preference with highest ticket'])
+            if 'Investor preference with highest ticket' in endpoint_data and 'Demand_listing' in endpoint_data:
+                total_min_combined, total_max_combined, count_combined = calculate_combined_demand_ticket_metrics(
+                    endpoint_data['Investor preference with highest ticket'],
+                    endpoint_data['Demand_listing']
+                )
+                mean_combined = (total_min_combined + total_max_combined) / 2
                 st.metric(
                     "Total Demand Ticket Size",
-                    f"${total_demand_ticket:.1f}M",
-                    help="Total accumulated ticket size of all demand side preferences"
+                    f"${total_min_combined:.1f}M - ${total_max_combined:.1f}M",
+                    delta=f"Mean: ${mean_combined:.1f}M",
+                    help="Total accumulated ticket size range of all demand side preferences and listings (minimum to maximum with mean)"
                 )
         
         with col4:
-            if 'Investor preference with highest ticket' in endpoint_data:
+            if 'Investor preference with highest ticket' in endpoint_data and 'Demand_listing' in endpoint_data:
                 st.metric(
                     "Number of Demands",
-                    f"{demand_count}",
-                    help="Total number of investor preferences with specified ticket sizes"
+                    f"{count_combined}",
+                    help="Total number of demand entries (investor preferences + demand listings) with specified ticket sizes"
                 )
         
         # Add clarification note about ticket size calculations
