@@ -438,7 +438,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     # Create subplots with secondary y-axis for the top chart
     fig = make_subplots(
         rows=2, cols=1,
-        subplot_titles=[main_title, f'Listings Ticket Sizes ({listing_count} companies)'],
+        subplot_titles=[main_title, f'Supply Ticket Sizes ({listing_count} companies)'],
         vertical_spacing=0.25,
         row_heights=[0.6, 0.4],
         specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
@@ -474,9 +474,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
             fillcolor='rgba(46, 134, 171, 0.3)',
             hovertemplate='<b>Cumulative Range</b><br>' +
                          'Date: %{x}<br>' +
-                         'Max: $%{y:.1f}M<br>' +
-                         'Min: $%{text:.1f}M<extra></extra>',
-            text=df['Cumulative Ticket Size Min']
+                         'Max: $%{y:.1f}M<extra></extra>'
         ),
         row=1, col=1, secondary_y=False
     )
@@ -493,7 +491,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
                 showlegend=False,
                 hovertemplate='<b>%{fullData.name}</b><br>' +
                              'Date: %{x}<br>' +
-                             'Ticket Size Range: $%{text:.1f}M - $%{y:.1f}M<extra></extra>',
+                             'Range: $%{text:.1f}M - $%{y:.1f}M<extra></extra>',
                 text=[row['Ticket Size Min']]
             ),
             row=1, col=1, secondary_y=True
@@ -523,13 +521,13 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
                         f"<b>{row['Listing ⁠Name']}</b><br>" +
                         f"<b>Total for listing: ${total_for_listing:.1f}M</b><br>" +
                         f"Entry {j + 1}: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                        f"Ticket Size Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
+                        f"Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
                     )
                 else:
                     hover_text = (
                         f"<b>{row['Listing ⁠Name']}</b><br>" +
                         f"Entry {j + 1}: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                        f"Ticket Size Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
+                        f"Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
                     )
                 
                 fig.add_trace(
@@ -553,7 +551,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
             hover_text = (
                 f"<b>{row['Listing ⁠Name']}</b><br>" +
                 f"Date: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                f"Ticket Size Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
+                f"Range: ${row['Ticket Size Min']:.1f}M - ${row['Ticket Size Value']:.1f}M"
             )
             
             fig.add_trace(
@@ -959,9 +957,7 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
             fillcolor='rgba(46, 134, 171, 0.3)',
             hovertemplate='<b>Cumulative Range</b><br>' +
                          'Date: %{x}<br>' +
-                         'Max: $%{y:.1f}M<br>' +
-                         'Min: $%{text:.1f}M<extra></extra>',
-            text=df['Cumulative Ticket Size Min']
+                         'Max: $%{y:.1f}M<extra></extra>'
         ),
         row=1, col=1, secondary_y=False
     )
