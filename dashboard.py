@@ -439,7 +439,7 @@ def main():
         country_active_users = get_country_active_users()
     
     # Display metrics in tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["Platform Metrics", "Website Analytics", "Search Performance", "Listing Ticket Size Tracker"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Platform Metrics", "Website Analytics", "Search Performance", "Supply & Demand"])
     
     with tab1:
         # Display Bubble API metrics
@@ -673,7 +673,7 @@ def main():
         st.info("📝 **Note**: When user selects 'Not specified' as the ticket size, it is treated as $0M in all calculations above and below.")
         
         if 'Deal specification with company name' in endpoint_data:
-            st.subheader("All Platform Listings Tracker")
+            st.subheader("Sell Side Listings Ticket Size")
             st.plotly_chart(
                 create_interactive_plot_ticket(
                     endpoint_data['Deal specification with company name'],
@@ -703,7 +703,7 @@ def main():
             st.write("No investor preference data found")
 
         if 'Demand_listing' in endpoint_data:
-            st.subheader("Demand Listing Ticket Size Tracker")
+            st.subheader("Dark Pool Ticket Size")
             
             st.plotly_chart(
                 create_interactive_plot_ticket(

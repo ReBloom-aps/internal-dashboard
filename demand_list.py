@@ -162,7 +162,6 @@ def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumul
             fill='tonexty',
             fillcolor='rgba(46, 134, 171, 0.3)',
             hovertemplate='<b>Cumulative Total</b><br>' +
-                         'Date: %{x}<br>' +
                          'Cumulative Size: $%{y:.1f}M<extra></extra>'
         ),
         row=1, col=1, secondary_y=False
@@ -176,8 +175,7 @@ def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumul
             mode='markers',
             name='Individual Tickets',
             marker=dict(size=10, color='orange', line=dict(color='black', width=1)),
-            hovertemplate='<b>Individual Ticket</b><br>' +
-                         'Date: %{x}<br>' +
+            hovertemplate='<b>Date: %{x}</b><br>' +
                          'Ticket Size: $%{y:.1f}M<extra></extra>'
         ),
         row=1, col=1, secondary_y=True
@@ -221,12 +219,22 @@ def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumul
         else:
             # Multiple entries for this date - create stacked bars
             cumulative_base = 0
-            for entry_idx, (_, entry) in enumerate(date_entries.iterrows()):
-                hover_text = (
-                    f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
-                    f"Entry {entry_idx + 1}: ${entry['Ticket Size Value']:.1f}M<br>" +
-                    f"Total for date: ${date_entries['Ticket Size Value'].sum():.1f}M"
-                )
+            total_for_date = date_entries['Ticket Size Value'].sum()
+            date_entries_list = list(date_entries.iterrows())
+            
+            for entry_idx, (_, entry) in enumerate(date_entries_list):
+                # Only show total for the last (top) entry in the stack
+                if entry_idx == len(date_entries_list) - 1:
+                    hover_text = (
+                        f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                        f"<b>Total for date: ${total_for_date:.1f}M</b><br>" +
+                        f"Entry {entry_idx + 1}: ${entry['Ticket Size Value']:.1f}M"
+                    )
+                else:
+                    hover_text = (
+                        f"<b>Date: {date.strftime('%b %d, %Y')}</b><br>" +
+                        f"Entry {entry_idx + 1}: ${entry['Ticket Size Value']:.1f}M"
+                    )
                 
                 fig.add_trace(
                     go.Bar(
@@ -253,7 +261,7 @@ def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumul
     )
     
     # Update x-axis for first subplot
-    fig.update_xaxes(title_text="Modified Date", row=1, col=1)
+    fig.update_xaxes(title_text="Date", row=1, col=1)
     
     # Update y-axes for first subplot (dual y-axis)
     fig.update_yaxes(title_text="Cumulative Ticket Size ($ Millions)", row=1, col=1, secondary_y=False)
@@ -352,7 +360,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     # Create subplots with secondary y-axis for the top chart
     fig = make_subplots(
         rows=2, cols=1,
-        subplot_titles=[main_title, f'Individual Listing Ticket Sizes ({listing_count} Listings)'],
+        subplot_titles=[main_title, f'Listings Ticket Sizes ({listing_count} companies)'],
         vertical_spacing=0.25,
         row_heights=[0.6, 0.4],
         specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
@@ -405,13 +413,22 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
         if len(group_rows) > 1:
             # If multiple entries for same listing, stack them properly
             cumulative_bottom = 0
+            total_for_listing = group_data['Ticket Size Value'].sum()
             for j, (_, row) in enumerate(group_rows):
-                hover_text = (
-                    f"<b>{row['Listing ⁠Name']}</b><br>" +
-                    f"Entry {j + 1}: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
-                    f"Ticket Size: ${row['Ticket Size Value']:.1f}M<br>" +
-                    f"Total for listing: ${group_data['Ticket Size Value'].sum():.1f}M"
-                )
+                # Only show total for the last (top) entry in the stack
+                if j == len(group_rows) - 1:
+                    hover_text = (
+                        f"<b>{row['Listing ⁠Name']}</b><br>" +
+                        f"<b>Total for listing: ${total_for_listing:.1f}M</b><br>" +
+                        f"Entry {j + 1}: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
+                        f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
+                    )
+                else:
+                    hover_text = (
+                        f"<b>{row['Listing ⁠Name']}</b><br>" +
+                        f"Entry {j + 1}: {row['Modified Date'].strftime('%b %d, %Y')}<br>" +
+                        f"Ticket Size: ${row['Ticket Size Value']:.1f}M"
+                    )
                 
                 fig.add_trace(
                     go.Bar(
@@ -464,7 +481,7 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     )
     
     # Update x-axis for first subplot
-    fig.update_xaxes(title_text="Modified Date", row=1, col=1)
+    fig.update_xaxes(title_text="Updated Date", row=1, col=1)
     
     # Update y-axes for first subplot (dual y-axis)
     fig.update_yaxes(title_text="Cumulative Ticket Size ($ Millions)", row=1, col=1, secondary_y=False)
