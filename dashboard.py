@@ -677,16 +677,38 @@ def main():
                 )
         
         # Add clarification note about ticket size calculations
+
+
+        if 'Listing' in endpoint_data and 'Deal specification with company name' in endpoint_data:
+
+            def is_darkpool(item):
+                return item.get("dark pool?") is True
+            
+            st.subheader("Supply size for darkpool listings")
+            st.plotly_chart(
+                create_interactive_plot_ticket(
+                    endpoint_data['Listing'],
+                    'Darkpool Supply Creation Timeline',
+                    modified_date = 'Modified Date',
+                    ticket_size = 'Ticket size',
+                    listing_name = 'company_name',
+                    second_response_data = endpoint_data['Deal specification with company name'],
+                    filter_func=is_darkpool
+                ),
+                use_container_width=True
+            )
+        else:
+            st.write("No deal specification data found")
         
         if 'Deal specification with company name' in endpoint_data:
-            st.subheader("Supply Size")
+            st.subheader("Supply size for public listings")
             st.plotly_chart(
                 create_interactive_plot_ticket(
                     endpoint_data['Deal specification with company name'],
-                    'Supply Creation Timeline',
+                    'Public Supply Creation Timeline',
                     modified_date = 'Modified Date',
                     ticket_size = 'ticket_size',
-                    listing_name = 'Listing Name'
+                    listing_name = 'Listing Name',
                 ),
                 use_container_width=True
             )
@@ -723,8 +745,7 @@ def main():
 
         # Combined demand plot
         if 'Investor preference with highest ticket' in endpoint_data and 'Demand_listing' in endpoint_data:
-            st.subheader("Demand Size")
-            # st.info("🔍 **Combined View**: Orange markers represent investor preferences, yellow markers represent demand listings with company names.")
+            st.subheader("Demand for Public & Dark Pool Listings")
             
             st.plotly_chart(
                 create_combined_demand_plot(

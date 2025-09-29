@@ -359,15 +359,21 @@ def create_interactive_plot_ticket_no_listing_name(response_data, title='Accumul
     
     return fig
 
-def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size of Platform Listings Over Time', modified_date='Modified Date', ticket_size='Ticketsize', listing_name='Listing ⁠Name'):
+def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size of Platform Listings Over Time', modified_date='Modified Date', ticket_size='Ticketsize', listing_name='Listing ⁠Name', second_response_data=None, filter_func=None):
     """Create interactive ticket size tracker plots using Plotly"""
     
     if not response_data or 'response' not in response_data or 'results' not in response_data['response']:
         raise ValueError("Invalid response data format")
-        
+    
     results = response_data['response']['results']
     if not results:
         raise ValueError("No results found in response data")
+    print("results before filtering:")
+    print(len(results))
+    if filter_func:
+        results = [item for item in results if filter_func(item)]
+    if second_response_data:
+        second_results = second_response_data['response']['results']
         
     total_count = len(results)
     main_title = f"{title} (Total: {total_count})"
@@ -395,11 +401,32 @@ def create_interactive_plot_ticket(response_data, title='Accumulated Ticket Size
     # Parse ticket sizes with error handling (both max and min)
     ticket_sizes_max = []
     ticket_sizes_min = []
+    # If secondary data is provided, use its ticket_size by joining on _id (results) and 'OG listing' (second_results)
+    og_listing_to_ticket_size = {}
+    if second_response_data:
+        try:
+            og_listing_to_ticket_size = {
+                sr.get('OG listing'): sr.get('ticket_size', '')
+                for sr in second_results if sr.get('OG listing')
+            }
+        except Exception as e:
+            print(f"Warning: Failed to build secondary ticket size map: {e}")
+            og_listing_to_ticket_size = {}
+
     for item in results:
         try:
-            size_str = item.get(ticket_size, '')
-            if not size_str:
-                raise ValueError(f"Missing {ticket_size} field")
+            if second_response_data:
+                result_id = item.get('_id')
+                if not result_id:
+                    raise ValueError("Missing _id field for join with secondary results")
+                size_str = og_listing_to_ticket_size.get(result_id, '')
+                if not size_str:
+                    raise ValueError("No matching ticket_size in secondary results for this _id")
+            else:
+                size_str = item.get(ticket_size, '')
+                if not size_str:
+                    raise ValueError(f"Missing {ticket_size} field")
+
             ticket_sizes_max.append(parse_ticket_size(size_str))
             ticket_sizes_min.append(parse_ticket_size_min(size_str))
         except (ValueError, TypeError) as e:
@@ -916,7 +943,7 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
     investor_count = len([x for x in combined_data if x['Source'] == 'Investor Preference'])
     demand_count = len([x for x in combined_data if x['Source'] == 'Demand Listing'])
     
-    main_title = f"{title} (Total: {total_count} | Investor Pref: {investor_count} | Demand Listings: {demand_count})"
+    main_title = f"{title} (Total: {total_count} | Public Demand: {investor_count} | Darkpool Demand: {demand_count})"
     
     # Create subplots with secondary y-axis for the top chart
     fig = make_subplots(
@@ -973,7 +1000,7 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
                 x=investor_df['Date'],
                 y=investor_df['Ticket Size'],
                 mode='markers',
-                name='Investor Preferences',
+                name='Public(Investor Preferences)',
                 marker=dict(size=10, color='orange', line=dict(color='black', width=1)),
                 hovertemplate='<b>Investor Preference</b><br>' +
                              'Date: %{x}<br>' +
@@ -999,7 +1026,7 @@ def create_combined_demand_plot(investor_preference_data, demand_listing_data, t
                 x=demand_df['Date'],
                 y=demand_df['Ticket Size'],
                 mode='markers',
-                name='Demand Listings',
+                name='Darkpool(Demand Listings)',
                 marker=dict(size=10, color='yellow', line=dict(color='black', width=1)),
                 text=hover_text,
                 hovertemplate='%{text}<extra></extra>',
