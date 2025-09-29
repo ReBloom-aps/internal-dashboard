@@ -684,7 +684,7 @@ def main():
             def is_darkpool(item):
                 return item.get("dark pool?") is True
             
-            st.subheader("Supply size for darkpool listings")
+            st.subheader("DarkPool Supply")
             st.plotly_chart(
                 create_interactive_plot_ticket(
                     endpoint_data['Listing'],
@@ -701,10 +701,18 @@ def main():
             st.write("No deal specification data found")
         
         if 'Deal specification with company name' in endpoint_data:
-            st.subheader("Supply size for public listings")
+            st.subheader("Public Supply")
             st.plotly_chart(
                 create_interactive_plot_ticket(
-                    endpoint_data['Deal specification with company name'],
+                    # Join Deal spec with Listing on OG listing (deal) -> _id (listing) and filter out dark pool
+                    (lambda ds, ls: {
+                        'response': {
+                            'results': [
+                                item for item in ds['response']['results']
+                                if not ({r.get('_id'): r.get('dark pool?') for r in ls['response']['results']}.get(item.get('OG listing')) is True)
+                            ]
+                        }
+                    })(endpoint_data['Deal specification with company name'], endpoint_data['Listing']),
                     'Public Supply Creation Timeline',
                     modified_date = 'Modified Date',
                     ticket_size = 'ticket_size',
