@@ -135,12 +135,12 @@ def calculate_combined_demand_ticket_metrics(investor_preference_data, demand_li
         for item in investor_preference_data['response']['results']:
             try:
                 size_str = item.get('highest_ticket_size', '')
+                min_str = item.get('lowest_ticket_size_value', '')
                 if size_str:
                     parsed_max = parse_ticket_size(size_str)
-                    parsed_min = parse_ticket_size_min(size_str)
                     if parsed_max > 0:
                         total_max_combined += parsed_max
-                        total_min_combined += parsed_min
+                        total_min_combined += min_str
                         count_combined += 1
             except (ValueError, TypeError):
                 continue
