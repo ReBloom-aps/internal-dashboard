@@ -1,7 +1,7 @@
 ## dev
 
 ```shell
-.\venv\Scripts\activate
+source ./venv/bin/activate
 streamlit run dashboard.py
 
 ```

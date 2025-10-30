@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from bubble_api import fetch_all_pages
+from bubble_api import export_institutional_users_csv, export_institutional_mom_2025
 from google_api import get_website_traffic, get_country_traffic, get_search_console_data, get_active_users, get_user_types, get_country_active_users
 import plotly.express as px
 import plotly.graph_objects as go
@@ -52,6 +53,20 @@ st.markdown("""
         border-radius: 10px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         margin-bottom: 1rem;
+    }
+    /* Reduce st.metric value font-size and prevent truncation */
+    div[data-testid="stMetricValue"] {
+        font-size: 26px !important;
+        line-height: 1.15 !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 14px !important;
+        line-height: 1.2 !important;
+    }
+    div[data-testid="stMetricDelta"] {
+        font-size: 14px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -255,7 +270,17 @@ def get_min_ticket_size_value(number):
         return 0
     
     ticket_size_str = str(ticket_size_str).strip()
-    
+def _parse_iso_date(date_value):
+    """Parse an ISO-like string (e.g., 2024-11-07T08:07:28.307Z or 2024-11-07) to datetime.date.
+    Returns None if parsing fails."""
+    if not date_value:
+        return None
+    try:
+        date_part = date_value[:10] if isinstance(date_value, str) and 'T' in date_value else date_value
+        return datetime.strptime(date_part, '%Y-%m-%d')
+    except Exception:
+        return None
+
 def parse_single_ticket_size_max(ticket_size_str):
     """Parse a single ticket size string and return value in millions (same logic as demand_list.py)"""
     if not ticket_size_str or ticket_size_str == '':
@@ -411,12 +436,8 @@ def add_listing_name(endpoint_data_listing, endpoint_data_deal_specification):
         
         if company_id and company_name:
             company_mapping[company_id] = company_name
-            print(f"Mapped: {company_id} -> {company_name}")
     
-    print(f"=== COMPANY MAPPING CREATED ===")
-    print(f"Total mappings: {len(company_mapping)}")
-    print("First 5 mappings:", dict(list(company_mapping.items())[:5]))
-    
+   
     # Create a deep copy of the deal specification data to avoid modifying the original
     deal_specification_with_company_name = copy.deepcopy(endpoint_data_deal_specification)
     
@@ -432,21 +453,13 @@ def add_listing_name(endpoint_data_listing, endpoint_data_deal_specification):
                 item['Listing Name'] = company_mapping[og_listing_id]
                 item['Listing ID'] = og_listing_id
                 matched_count += 1
-                print(f"✓ Matched: {og_listing_id} -> {company_mapping[og_listing_id]}")
             else:
                 # Set a default value for unmatched listings
                 item['Listing Name'] = f"Unknown ({og_listing_id})"
                 item['Listing ID'] = og_listing_id
-                print(f"✗ No match found for: {og_listing_id}")
         else:
             item['Listing Name'] = "No OG listing specified"
             item['Listing ID'] = None
-            print("✗ No OG listing field found")
-    
-    print(f"=== MATCHING RESULTS ===")
-    print(f"Total deal specifications: {total_count}")
-    print(f"Successfully matched: {matched_count}")
-    print(f"Match rate: {(matched_count/total_count)*100:.1f}%")
     
     return deal_specification_with_company_name
 
@@ -479,6 +492,19 @@ def main():
             endpoint_data['Investor preference with min max'] = add_highest_ticket_size(endpoint_data['Investor preference'])
 
         
+        # Write exports for institutional users
+        if 'User' in endpoint_data:
+            import os
+            os.makedirs('exports', exist_ok=True)
+            csv_users = os.path.join('exports', 'institutional_users.csv')
+            csv_mom = os.path.join('exports', 'institutional_signups_2025_mom.csv')
+            png_mom = os.path.join('exports', 'institutional_signups_2025_mom.png')
+            try:
+                export_institutional_users_csv(endpoint_data['User'], csv_users)
+                export_institutional_mom_2025(endpoint_data['User'], 'Created Date', csv_mom, png_mom)
+            except Exception as e:
+                st.warning(f"Could not write exports: {e}")
+
         # Fetch Google Analytics data
         website_traffic = get_website_traffic()
         country_traffic = get_country_traffic()
@@ -807,6 +833,306 @@ def main():
                     endpoint_data['Demand_listing'],
                     modified_date='Modified Date',
                     ticket_size='Ticketsize',
+                )
+                mean_dl = (total_min_dl + total_max_dl) / 2
+                st.metric(
+                    "Darkpool Demand Ticket Size",
+                    f"${total_min_dl:.1f}M - ${total_max_dl:.1f}M",
+                    delta=f"Mean: ${mean_dl:.1f}M",
+                    help="Ticket size totals computed from Demand Listings only"
+                )
+        
+        # Today section: duplicate the same eight metrics below without any filtering
+        st.markdown(
+            """
+            <style>
+            .today-box { background: #e8f5e9; padding: 16px; border-radius: 10px; }
+            .archived-box { background: #f2f3f5; padding: 16px; border-radius: 10px; }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        st.markdown('<div class="today-box">', unsafe_allow_html=True)
+        st.subheader("Active")
+        
+        col1_t, col2_t, col3_t, col4_t = st.columns(4)
+
+        with col1_t:
+            if 'Deal specification with company name' in endpoint_data:
+                total_min, total_max, listing_count, avg_min, avg_max = calculate_listing_ticket_metrics(endpoint_data['Deal specification with company name'], status='Active')
+                mean_total = (total_min + total_max) / 2
+                st.metric(
+                    "Total Supply Ticket Size",
+                    f"${total_min:.1f}M - ${total_max:.1f}M",
+                    delta=f"Mean: ${mean_total:.1f}M",
+                    help="Total accumulated ticket size range of all platform listings (minimum to maximum with mean)"
+                )
+                st.metric(
+                    "Total Number of Supply",
+                    f"{listing_count}",
+                    help="Total number of listings with specified ticket sizes"
+                )
+
+        with col2_t:
+            if 'Deal specification with company name' in endpoint_data:
+                total_min, total_max, listing_count, avg_min, avg_max = calculate_listing_ticket_metrics(endpoint_data['Deal specification with company name'], status='Active')
+                mean_total = (total_min + total_max) / 2
+                # Darkpool Listing Ticket Size (only listings where corresponding Listing.dark pool? is True)
+                try:
+                    ds = endpoint_data['Deal specification with company name']
+                    ls = endpoint_data.get('Listing')
+                    if ls and 'response' in ls and 'results' in ls['response']:
+                        # Filter listings to only Active status
+                        _ls_results_active = [r for r in ls['response']['results'] if r.get('status') == 'Active']
+                        darkpool_ds = (
+                            lambda ds_in, ls_in: {
+                                'response': {
+                                    'results': [
+                                        item for item in ds_in['response']['results']
+                                        if ({r.get('_id'): r.get('dark pool?') for r in ls_in}.get(item.get('OG listing')) is True)
+                                    ]
+                                }
+                            }
+                        )(ds, _ls_results_active)
+                        dp_min, dp_max, dp_count, dp_avg_min, dp_avg_max = calculate_listing_ticket_metrics(darkpool_ds, status='Active')
+                        dp_mean = (dp_min + dp_max) / 2
+                        st.metric(
+                            "Darkpool Supply Ticket Size",
+                            f"${dp_min:.1f}M - ${dp_max:.1f}M",
+                            delta=f"Mean: ${dp_mean:.1f}M",
+                            help="Ticket size range for listings whose Listing.dark pool? is True"
+                        )
+
+                        # Public Listing Ticket Size = Total Listing Ticket Size - Darkpool Listing Ticket Size
+                        public_min = max(total_min - dp_min, 0)
+                        public_max = max(total_max - dp_max, 0)
+                        public_mean = (public_min + public_max) / 2
+                        st.metric(
+                            "Public Supply Ticket Size",
+                            f"${public_min:.1f}M - ${public_max:.1f}M",
+                            delta=f"Mean: ${public_mean:.1f}M",
+                            help="Ticket size range for listings whose Listing.dark pool? is False or not set"
+                        )
+                except Exception:
+                    pass
+
+        with col3_t:
+            if 'Investor preference with min max' in endpoint_data and 'Demand_listing' in endpoint_data:
+                total_min_combined, total_max_combined, count_combined = calculate_combined_demand_ticket_metrics(
+                    endpoint_data['Investor preference with min max'],
+                    endpoint_data['Demand_listing'],
+                    status='Active'
+                )
+                mean_combined = (total_min_combined + total_max_combined) / 2
+                st.metric(
+                    "Total Demand Ticket Size",
+                    f"${total_min_combined:.1f}M - ${total_max_combined:.1f}M",
+                    delta=f"Mean: ${mean_combined:.1f}M",
+                    help="Total accumulated ticket size range of all demand side preferences and listings (minimum to maximum with mean)"
+                )
+
+            if 'Investor preference with min max' in endpoint_data and 'Demand_listing' in endpoint_data:
+                st.metric(
+                    "Total Number of Demands",
+                    f"{count_combined}",
+                    help="Total number of demand entries (investor preferences + demand listings) with specified ticket sizes"
+                )
+
+        with col4_t:
+            # Public Demand Ticket Size (Investor preference with min max only)
+            if 'Investor preference with min max' in endpoint_data:
+                total_min_pub = 0
+                total_max_pub = 0
+                count_pub = 0
+                try:
+                    investor_preference_data = endpoint_data['Investor preference with min max']
+                    if investor_preference_data and 'response' in investor_preference_data and 'results' in investor_preference_data['response']:
+                        cutoff_dt = datetime.now() - timedelta(days=90)
+                        investor_preference_active = [
+                            r for r in investor_preference_data['response']['results']
+                            if (d := _parse_iso_date(r.get('Modified Date'))) is not None and d < cutoff_dt
+                        ]
+                        for item in investor_preference_active:
+                            try:
+                                size_str = item.get('highest_ticket_size', '')
+                                min_val = item.get('lowest_ticket_size_value', 0)
+                                if size_str:
+                                    parsed_max = parse_single_ticket_size_max(size_str)
+                                    if parsed_max > 0:
+                                        total_max_pub += parsed_max
+                                        # Ensure numeric min value
+                                        try:
+                                            min_num = float(min_val)
+                                        except (ValueError, TypeError):
+                                            min_num = 0
+                                        total_min_pub += min_num
+                                        count_pub += 1
+                            except (ValueError, TypeError):
+                                continue
+                except Exception:
+                    pass
+
+                mean_pub = (total_min_pub + total_max_pub) / 2 if (total_min_pub + total_max_pub) > 0 else 0
+                st.metric(
+                    "Public Demand Ticket Size",
+                    f"${total_min_pub:.1f}M - ${total_max_pub:.1f}M",
+                    delta=f"Mean: ${mean_pub:.1f}M",
+                    help="Ticket size totals computed from Investor Preference only"
+                )
+
+            # Darkpool Demand Ticket Size (Demand_listing only)
+            if 'Demand_listing' in endpoint_data:
+                total_min_dl, total_max_dl, count_dl, avg_min_dl, avg_max_dl = calculate_ticket_size_metrics(
+                    endpoint_data['Demand_listing'],
+                    modified_date='Modified Date',
+                    ticket_size='Ticketsize',
+                    status='Active'
+                )
+                mean_dl = (total_min_dl + total_max_dl) / 2
+                st.metric(
+                    "Darkpool Demand Ticket Size",
+                    f"${total_min_dl:.1f}M - ${total_max_dl:.1f}M",
+                    delta=f"Mean: ${mean_dl:.1f}M",
+                    help="Ticket size totals computed from Demand Listings only"
+                )
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Archived section in an expander and grey background
+        with st.expander("Archived", expanded=False):
+            st.markdown('<div class="archived-box">', unsafe_allow_html=True)
+            
+            col1_t, col2_t, col3_t, col4_t = st.columns(4)
+
+        with col1_t:
+            if 'Deal specification with company name' in endpoint_data:
+                total_min, total_max, listing_count, avg_min, avg_max = calculate_listing_ticket_metrics(endpoint_data['Deal specification with company name'],status='Archived')
+                mean_total = (total_min + total_max) / 2
+                st.metric(
+                    "Total Supply Ticket Size",
+                    f"${total_min:.1f}M - ${total_max:.1f}M",
+                    delta=f"Mean: ${mean_total:.1f}M",
+                    help="Total accumulated ticket size range of all platform listings (minimum to maximum with mean)"
+                )
+                st.metric(
+                    "Total Number of Supply",
+                    f"{listing_count}",
+                    help="Total number of listings with specified ticket sizes"
+                )
+
+        with col2_t:
+            if 'Deal specification with company name' in endpoint_data:
+                total_min, total_max, listing_count, avg_min, avg_max = calculate_listing_ticket_metrics(endpoint_data['Deal specification with company name'],status='Archived')
+                mean_total = (total_min + total_max) / 2
+                # Darkpool Listing Ticket Size (only listings where corresponding Listing.dark pool? is True)
+                try:
+                    ds = endpoint_data['Deal specification with company name']
+                    ls = endpoint_data.get('Listing')
+                    if ls and 'response' in ls and 'results' in ls['response']:
+                        darkpool_ds = (
+                            lambda ds_in, ls_in: {
+                                'response': {
+                                    'results': [
+                                        item for item in ds_in['response']['results']
+                                        if ({r.get('_id'): r.get('dark pool?') for r in ls_in['response']['results']}.get(item.get('OG listing')) is True)
+                                    ]
+                                }
+                            }
+                        )(ds, ls)
+                        dp_min, dp_max, dp_count, dp_avg_min, dp_avg_max = calculate_listing_ticket_metrics(darkpool_ds, status='Archived')
+                        dp_mean = (dp_min + dp_max) / 2
+                        st.metric(
+                            "Darkpool Supply Ticket Size",
+                            f"${dp_min:.1f}M - ${dp_max:.1f}M",
+                            delta=f"Mean: ${dp_mean:.1f}M",
+                            help="Ticket size range for listings whose Listing.dark pool? is True"
+                        )
+
+                        # Public Listing Ticket Size = Total Listing Ticket Size - Darkpool Listing Ticket Size
+                        public_min = max(total_min - dp_min, 0)
+                        public_max = max(total_max - dp_max, 0)
+                        public_mean = (public_min + public_max) / 2
+                        st.metric(
+                            "Public Supply Ticket Size",
+                            f"${public_min:.1f}M - ${public_max:.1f}M",
+                            delta=f"Mean: ${public_mean:.1f}M",
+                            help="Ticket size range for listings whose Listing.dark pool? is False or not set"
+                        )
+                except Exception:
+                    pass
+
+        with col3_t:
+            if 'Investor preference with min max' in endpoint_data and 'Demand_listing' in endpoint_data:
+                total_min_combined, total_max_combined, count_combined = calculate_combined_demand_ticket_metrics(
+                    endpoint_data['Investor preference with min max'],
+                    endpoint_data['Demand_listing'],
+                    status='Archived'
+                )
+                mean_combined = (total_min_combined + total_max_combined) / 2
+                st.metric(
+                    "Total Demand Ticket Size",
+                    f"${total_min_combined:.1f}M - ${total_max_combined:.1f}M",
+                    delta=f"Mean: ${mean_combined:.1f}M",
+                    help="Total accumulated ticket size range of all demand side preferences and listings (minimum to maximum with mean)"
+                )
+
+            if 'Investor preference with min max' in endpoint_data and 'Demand_listing' in endpoint_data:
+                st.metric(
+                    "Total Number of Demands",
+                    f"{count_combined}",
+                    help="Total number of demand entries (investor preferences + demand listings) with specified ticket sizes"
+                )
+
+        with col4_t:
+            # Public Demand Ticket Size (Investor preference with min max only)
+            if 'Investor preference with min max' in endpoint_data:
+                total_min_pub = 0
+                total_max_pub = 0
+                count_pub = 0
+                try:
+                    investor_preference_data = endpoint_data['Investor preference with min max']
+                    if investor_preference_data and 'response' in investor_preference_data and 'results' in investor_preference_data['response']:
+                        cutoff_dt = datetime.now() - timedelta(days=90)
+                        investor_preference_archived = [
+                            r for r in investor_preference_data['response']['results']
+                            if (d := _parse_iso_date(r.get('Modified Date'))) is not None and d >= cutoff_dt
+                        ]
+                        for item in investor_preference_archived:
+                            try:
+                                size_str = item.get('highest_ticket_size', '')
+                                min_val = item.get('lowest_ticket_size_value', 0)
+                                if size_str:
+                                    parsed_max = parse_single_ticket_size_max(size_str)
+                                    if parsed_max > 0:
+                                        total_max_pub += parsed_max
+                                        # Ensure numeric min value
+                                        try:
+                                            min_num = float(min_val)
+                                        except (ValueError, TypeError):
+                                            min_num = 0
+                                        total_min_pub += min_num
+                                        count_pub += 1
+                            except (ValueError, TypeError):
+                                continue
+                except Exception:
+                    pass
+
+                mean_pub = (total_min_pub + total_max_pub) / 2 if (total_min_pub + total_max_pub) > 0 else 0
+                st.metric(
+                    "Public Demand Ticket Size",
+                    f"${total_min_pub:.1f}M - ${total_max_pub:.1f}M",
+                    delta=f"Mean: ${mean_pub:.1f}M",
+                    help="Ticket size totals computed from Investor Preference only"
+                )
+
+            # Darkpool Demand Ticket Size (Demand_listing only)
+            if 'Demand_listing' in endpoint_data:
+                total_min_dl, total_max_dl, count_dl, avg_min_dl, avg_max_dl = calculate_ticket_size_metrics(
+                    endpoint_data['Demand_listing'],
+                    modified_date='Modified Date',
+                    ticket_size='Ticketsize',
+                    status='Archived'
                 )
                 mean_dl = (total_min_dl + total_max_dl) / 2
                 st.metric(

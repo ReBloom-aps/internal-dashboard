@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import seaborn as sns
 import requests
 import plotly.graph_objects as go
@@ -69,48 +69,74 @@ def parse_ticket_size_min(ticket_size_str):
     else:
         return 0
 
-def calculate_ticket_size_metrics(response_data, modified_date='Modified Date', ticket_size='Ticketsize', listing_name=None):
+def _parse_iso_date(date_value):
+    """Parse an ISO-like string (e.g., 2024-11-07T08:07:28.307Z or 2024-11-07) to datetime.date.
+    Returns None if parsing fails."""
+    if not date_value:
+        return None
+    try:
+        date_part = date_value[:10] if isinstance(date_value, str) and 'T' in date_value else date_value
+        return datetime.strptime(date_part, '%Y-%m-%d')
+    except Exception:
+        return None
+
+def calculate_ticket_size_metrics(response_data, modified_date='Modified Date', ticket_size='Ticketsize', listing_name=None, status=None):
     """Calculate ticket size metrics for display on dashboard"""
     if not response_data or 'response' not in response_data or 'results' not in response_data['response']:
         return 0, 0, 0, 0, 0  # total_min, total_max, count, average_min, average_max
-        
     results = response_data['response']['results']
     if not results:
-        return 0, 0, 0, 0, 0
+            return 0, 0, 0, 0, 0
+    if not status:
+        results = results
         
+    if status == 'Active':
+        cutoff_dt = datetime.now() - timedelta(days=90)
+        results = [
+            r for r in results
+            if (d := _parse_iso_date(r.get(modified_date))) is not None and d < cutoff_dt
+        ]
+    if status == 'Archived':
+        cutoff_dt = datetime.now() - timedelta(days=90)
+        results = [
+            r for r in results
+            if (d := _parse_iso_date(r.get(modified_date))) is not None and d >= cutoff_dt
+        ]
     # Parse ticket sizes with error handling (both min and max)
     valid_ticket_sizes_max = []
     valid_ticket_sizes_min = []
     for item in results:
         try:
-            size_str = item.get(ticket_size, '')
-            if size_str:
-                parsed_max = parse_ticket_size(size_str)
-                parsed_min = parse_ticket_size_min(size_str)
-                if parsed_max > 0:  # Only count non-zero ticket sizes
-                    valid_ticket_sizes_max.append(parsed_max)
-                    valid_ticket_sizes_min.append(parsed_min)
+                size_str = item.get(ticket_size, '')
+                if size_str:
+                    parsed_max = parse_ticket_size(size_str)
+                    parsed_min = parse_ticket_size_min(size_str)
+                    if parsed_max > 0:  # Only count non-zero ticket sizes
+                        valid_ticket_sizes_max.append(parsed_max)
+                        valid_ticket_sizes_min.append(parsed_min)
         except (ValueError, TypeError):
-            continue
-    
+                continue
+        
     if not valid_ticket_sizes_max:
-        return 0, 0, 0, 0, 0
-    
+            return 0, 0, 0, 0, 0
+        
     total_min = sum(valid_ticket_sizes_min)
     total_max = sum(valid_ticket_sizes_max)
     count = len(valid_ticket_sizes_max)
     average_min = total_min / count if count > 0 else 0
     average_max = total_max / count if count > 0 else 0
-    
+        
     return total_min, total_max, count, average_min, average_max
 
-def calculate_listing_ticket_metrics(response_data):
+
+def calculate_listing_ticket_metrics(response_data, status=None):
     """Calculate metrics for listing ticket sizes (Deal specification data)"""
     return calculate_ticket_size_metrics(
         response_data, 
         modified_date='Modified Date', 
         ticket_size='ticket_size', 
-        listing_name='Listing Name'
+        listing_name='Listing Name',
+        status=status
     )
 
 def calculate_demand_ticket_metrics(response_data):
@@ -124,7 +150,7 @@ def calculate_demand_ticket_metrics(response_data):
     # Return the max values as both min and max since we only have single values
     return total_max, count, avg_max
 
-def calculate_combined_demand_ticket_metrics(investor_preference_data, demand_listing_data):
+def calculate_combined_demand_ticket_metrics(investor_preference_data, demand_listing_data, status=None):
     """Calculate combined metrics for demand ticket sizes from both investor preferences and demand listings"""
     total_min_combined = 0
     total_max_combined = 0
@@ -132,7 +158,21 @@ def calculate_combined_demand_ticket_metrics(investor_preference_data, demand_li
     
     # Process investor preference data
     if investor_preference_data and 'response' in investor_preference_data and 'results' in investor_preference_data['response']:
-        for item in investor_preference_data['response']['results']:
+        cutoff_dt = datetime.now() - timedelta(days=90)
+
+        if status == 'Active':
+            investor_preference_data_results = [
+                r for r in investor_preference_data['response']['results']
+                if (d := _parse_iso_date(r.get('Modified Date'))) is not None and d < cutoff_dt
+            ]
+        if status == 'Archived':
+            investor_preference_data_results = [
+                r for r in investor_preference_data['response']['results']
+                if (d := _parse_iso_date(r.get('Modified Date'))) is not None and d >= cutoff_dt
+            ]
+        if status == None:
+            investor_preference_data_results = investor_preference_data['response']['results']
+        for item in investor_preference_data_results:
             try:
                 size_str = item.get('highest_ticket_size', '')
                 min_str = item.get('lowest_ticket_size_value', '')
@@ -147,7 +187,20 @@ def calculate_combined_demand_ticket_metrics(investor_preference_data, demand_li
     
     # Process demand listing data
     if demand_listing_data and 'response' in demand_listing_data and 'results' in demand_listing_data['response']:
-        for item in demand_listing_data['response']['results']:
+        cutoff_dt = datetime.now() - timedelta(days=90)
+        if status == 'Active':
+            demand_listing_data_results = [
+                r for r in demand_listing_data['response']['results']
+                if (d := _parse_iso_date(r.get('Modified Date'))) is not None and d < cutoff_dt
+            ]
+        if status == 'Archived':
+            demand_listing_data_results = [
+                r for r in demand_listing_data['response']['results']
+                if (d := _parse_iso_date(r.get('Modified Date'))) is not None and d >= cutoff_dt
+            ]
+        if status == None:
+            demand_listing_data_results = demand_listing_data['response']['results']
+        for item in demand_listing_data_results:
             try:
                 size_str = item.get('Ticketsize', '')
                 if size_str:
