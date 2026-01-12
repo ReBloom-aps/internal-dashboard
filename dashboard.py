@@ -463,11 +463,18 @@ def add_listing_name(endpoint_data_listing, endpoint_data_deal_specification):
     
     return deal_specification_with_company_name
 
+@st.cache_data(ttl=86400)  # Cache for 1 day (86400 seconds) to reduce API calls
+def _fetch_endpoint_cached(endpoint_name):
+    """Cached wrapper for fetch_all_pages to prevent excessive API calls"""
+    return fetch_all_pages(endpoint_name)
+
 def main():
     st.title("📊 ReBloom Analytics Dashboard")
     
     # Add refresh button
     if st.button("🔄 Refresh Data"):
+        # Clear cache to force fresh data fetch
+        _fetch_endpoint_cached.clear()
         if hasattr(st, 'experimental_rerun'):
             st.experimental_rerun()
         else:
@@ -481,7 +488,8 @@ def main():
         endpoint_data = {}
         
         for endpoint in endpoints:
-            data = fetch_all_pages(endpoint)
+            # Use cached fetch to avoid excessive API calls
+            data = _fetch_endpoint_cached(endpoint)
             if data:
                 endpoint_data[endpoint] = data
         
