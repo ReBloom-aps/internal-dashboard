@@ -484,7 +484,7 @@ def main():
     with st.spinner("Fetching data from all sources..."):
         # Fetch Bubble API data
         # Deal specification needs be after Listing, because it uses the Listing endpoint to get the company name
-        endpoints = ['Listing', 'User', 'Match', 'Demand_listing', 'Deal specification', 'Investor preference']
+        endpoints = ['Listing', 'User', 'Demand_listing', 'Deal specification', 'Investor preference']  # 'Match' removed - no longer needed
         endpoint_data = {}
         
         for endpoint in endpoints:
@@ -549,18 +549,20 @@ def main():
                 )
         
         with col3:
-            if 'Match' in endpoint_data:
-                total, weekly_add, growth = calculate_growth_metrics(
-                    endpoint_data['Match'], 
-                    'Created Date',
-                    filter_func=lambda x: x.get('seller_match_status') == 'Active'
-                )
-                growth_text = f"+{growth:.1f}%" if growth is not None else "N/A"
-                st.metric(
-                    "Active Matches",
-                    f"{total} (WoW growth: +{weekly_add}, {growth_text})",
-                    help="Total number of active matches"
-                )
+            # Match endpoint code commented out - no longer needed
+            # if 'Match' in endpoint_data:
+            #     total, weekly_add, growth = calculate_growth_metrics(
+            #         endpoint_data['Match'], 
+            #         'Created Date',
+            #         filter_func=lambda x: x.get('seller_match_status') == 'Active'
+            #     )
+            #     growth_text = f"+{growth:.1f}%" if growth is not None else "N/A"
+            #     st.metric(
+            #         "Active Matches",
+            #         f"{total} (WoW growth: +{weekly_add}, {growth_text})",
+            #         help="Total number of active matches"
+            #     )
+            pass
         
         # Display Bubble API plots
         if 'Listing' in endpoint_data:
@@ -583,16 +585,17 @@ def main():
                 use_container_width=True
             )
         
-        if 'Match' in endpoint_data:
-            st.plotly_chart(
-                create_interactive_plot(
-                    endpoint_data['Match'],
-                    'Created Date',
-                    'Active Match Timeline',
-                    filter_func=lambda x: x.get('seller_match_status') == 'Active'
-                ),
-                use_container_width=True
-            )
+        # Match endpoint plot code commented out - no longer needed
+        # if 'Match' in endpoint_data:
+        #     st.plotly_chart(
+        #         create_interactive_plot(
+        #             endpoint_data['Match'],
+        #             'Created Date',
+        #             'Active Match Timeline',
+        #             filter_func=lambda x: x.get('seller_match_status') == 'Active'
+        #         ),
+        #         use_container_width=True
+        #     )
     
     with tab2:
         # Display Google Analytics metrics
