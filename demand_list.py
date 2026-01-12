@@ -704,41 +704,41 @@ def load_from_csv_file(file_path):
     
     return df
 
-def fetch_all_pages(endpoint_name):
-    """Fetch all pages of data from an endpoint"""
-    base_url = f"https://rebloom.ai/version-test/api/1.1/obj/{endpoint_name}"
-    # headers = {
-    #     'Content-Type': 'application/json',
-    #     'Authorization': f'Bearer {os.getenv("BUBBLE_API_TOKEN")}'
-    # }
-    all_results = []
-    cursor = 0
+# def fetch_all_pages(endpoint_name):
+#     """Fetch all pages of data from an endpoint"""
+#     base_url = f"https://rebloom.ai/version-test/api/1.1/obj/{endpoint_name}"
+#     # headers = {
+#     #     'Content-Type': 'application/json',
+#     #     'Authorization': f'Bearer {os.getenv("BUBBLE_API_TOKEN")}'
+#     # }
+#     all_results = []
+#     cursor = 0
     
-    while True:
-        # Add fields parameter to explicitly request fields
-        url = f"{base_url}?cursor={cursor}"
-        if endpoint_name == 'User':
-            # Request all relevant user fields
-            url += "&fields=Created Date,Modified Date,_id,email,user_signed_up,user_last_login,user_name,user_role,user_status,user_type,user_verified,user_phone,user_address,user_city,user_state,user_zip,user_country,user_company,user_website,user_linkedin,user_twitter,user_facebook,user_instagram,user_youtube,user_github,user_avatar,user_bio,user_tags,user_preferences,user_settings,user_notifications,user_metadata"
+#     while True:
+#         # Add fields parameter to explicitly request fields
+#         url = f"{base_url}?cursor={cursor}"
+#         if endpoint_name == 'User':
+#             # Request all relevant user fields
+#             url += "&fields=Created Date,Modified Date,_id,email,user_signed_up,user_last_login,user_name,user_role,user_status,user_type,user_verified,user_phone,user_address,user_city,user_state,user_zip,user_country,user_company,user_website,user_linkedin,user_twitter,user_facebook,user_instagram,user_youtube,user_github,user_avatar,user_bio,user_tags,user_preferences,user_settings,user_notifications,user_metadata"
         
-        response = requests.get(base_url)
+#         response = requests.get(base_url)
         
-        if response.status_code == 200:
-            data = response.json()
-            results = data['response']['results']
-            all_results.extend(results)
+#         if response.status_code == 200:
+#             data = response.json()
+#             results = data['response']['results']
+#             all_results.extend(results)
             
-            remaining = data['response'].get('remaining', 0)
-            if remaining == 0:
-                break
+#             remaining = data['response'].get('remaining', 0)
+#             if remaining == 0:
+#                 break
                 
-            cursor += len(results)
-        else:
-            print(f"Error fetching page: {response.status_code}")
-            print(f"Response: {response.text}")
-            break
+#             cursor += len(results)
+#         else:
+#             print(f"Error fetching page: {response.status_code}")
+#             print(f"Response: {response.text}")
+#             break
     
-    return {'response': {'results': all_results, 'count': len(all_results), 'remaining': 0}}
+#     return {'response': {'results': all_results, 'count': len(all_results), 'remaining': 0}}
 
 # Run the analysis
 # if __name__ == "__main__":

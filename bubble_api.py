@@ -343,53 +343,56 @@ def export_institutional_mom_2025(user_data, date_field, output_csv_path, output
     plt.close()
     return int(monthly['Signups'].sum())
 
-def main():
-    # Load environment variables
-    load_dotenv()
-    
-    # Fetch and analyze each endpoint with all pages
-    endpoints = ['Listing', 'User', 'Match']
-    endpoint_data = {}
-    
-    for endpoint in endpoints:
-        data = fetch_all_pages(endpoint)
-        if data:
-            print_json_structure(data, endpoint)
-            endpoint_data[endpoint] = data
-    
-    # Create plots for each type
-    if 'Listing' in endpoint_data:
-        create_growth_plot(
-            endpoint_data['Listing'],
-            'Created Date',
-            'Listing Creation Timeline',
-            'listing_creations.png'
-        )
-    
-    if 'User' in endpoint_data:
-        create_growth_plot(
-            endpoint_data['User'],
-            'Created Date',
-            'User Growth Timeline',
-            'user_growth.png'
-        )
-        # Exports for institutional users
-        os.makedirs('exports', exist_ok=True)
-        csv_users = os.path.join('exports', 'institutional_users.csv')
-        csv_mom = os.path.join('exports', 'institutional_signups_2025_mom.csv')
-        png_mom = os.path.join('exports', 'institutional_signups_2025_mom.png')
-        exported_count = export_institutional_users_csv(endpoint_data['User'], csv_users)
-        export_institutional_mom_2025(endpoint_data['User'], 'Created Date', csv_mom, png_mom)
-    
-    if 'Match' in endpoint_data:
-        # Filter for active seller matches
-        create_growth_plot(
-            endpoint_data['Match'],
-            'Created Date',
-            'Active Match Timeline',
-            'active_matches.png',
-            filter_func=lambda x: x.get('seller_match_status') == 'Active'
-        )
+# Main function commented out to prevent redundant API calls
+# All functionality has been moved to dashboard.py (Streamlit app)
+# If you need to run this standalone script, uncomment below
+# def main():
+#     # Load environment variables
+#     load_dotenv()
+#     
+#     # Fetch and analyze each endpoint with all pages
+#     endpoints = ['Listing', 'User', 'Match']
+#     endpoint_data = {}
+#     
+#     for endpoint in endpoints:
+#         data = fetch_all_pages(endpoint)
+#         if data:
+#             print_json_structure(data, endpoint)
+#             endpoint_data[endpoint] = data
+#     
+#     # Create plots for each type
+#     if 'Listing' in endpoint_data:
+#         create_growth_plot(
+#             endpoint_data['Listing'],
+#             'Created Date',
+#             'Listing Creation Timeline',
+#             'listing_creations.png'
+#         )
+#     
+#     if 'User' in endpoint_data:
+#         create_growth_plot(
+#             endpoint_data['User'],
+#             'Created Date',
+#             'User Growth Timeline',
+#             'user_growth.png'
+#         )
+#         # Exports for institutional users
+#         os.makedirs('exports', exist_ok=True)
+#         csv_users = os.path.join('exports', 'institutional_users.csv')
+#         csv_mom = os.path.join('exports', 'institutional_signups_2025_mom.csv')
+#         png_mom = os.path.join('exports', 'institutional_signups_2025_mom.png')
+#         exported_count = export_institutional_users_csv(endpoint_data['User'], csv_users)
+#         export_institutional_mom_2025(endpoint_data['User'], 'Created Date', csv_mom, png_mom)
+#     
+#     if 'Match' in endpoint_data:
+#         # Filter for active seller matches
+#         create_growth_plot(
+#             endpoint_data['Match'],
+#             'Created Date',
+#             'Active Match Timeline',
+#             'active_matches.png',
+#             filter_func=lambda x: x.get('seller_match_status') == 'Active'
+#         )
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
